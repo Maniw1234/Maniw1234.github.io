@@ -6,6 +6,9 @@
   var root = document.documentElement;
   var view = document.getElementById("project-view");
 
+  // without WebGL (or if the 3D script never runs) the loading screen still goes away
+  window.addEventListener("load", function () { setTimeout(function () { if (!root.classList.contains("has-gl") && window.__load) window.__load.done(); }, 300); });
+
   var year = document.getElementById("year");
   if (year) year.textContent = String(new Date().getFullYear());
 
@@ -332,7 +335,7 @@
 
   /* ---------- full-screen project view ---------- */
   var body = document.getElementById("pview-body"), num = document.getElementById("pview-n");
-  var opener = null, spinRaf = 0;
+  var opener = null, spinRaf = 0, shareBtn = document.getElementById("pview-share"), current = null;
   function buildGallery(rootEl) {
     var g = rootEl.querySelector("[data-gallery]"); if (!g) return;
     var shots = Array.prototype.slice.call(g.children); if (!shots.length) return;
@@ -367,6 +370,7 @@
   function openProject(i, trigger) {
     var p = projects[i];
     if (!p || !view || typeof view.showModal !== "function") return false;
+    current = p;
     body.innerHTML = ""; body.appendChild(fullView(p));
     num.textContent = "Project " + String(i + 1).padStart(2, "0");
     opener = trigger || null;
@@ -383,6 +387,21 @@
     });
     view.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) view.close(); });
   }
+  // copy link: phones get the share sheet, everything else copies the project's own link
+  function copyText(t) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t);
+    return new Promise(function (ok, no) {
+      var ta = el("textarea"); ta.value = t; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+      view.appendChild(ta); ta.select(); var done = false; try { done = document.execCommand("copy"); } catch (e) {} ta.remove(); done ? ok() : no();
+    });
+  }
+  if (shareBtn) shareBtn.addEventListener("click", function () {
+    if (!current) return;
+    var url = location.origin + location.pathname + "#" + current._id, label = shareBtn.querySelector("span");
+    var said = function (t) { label.textContent = t; shareBtn.classList.add("is-done"); setTimeout(function () { label.textContent = "Copy link"; shareBtn.classList.remove("is-done"); }, 2200); };
+    if (navigator.share && window.matchMedia("(hover: none)").matches) { navigator.share({ title: current.title, url: url }).catch(function () {}); return; }
+    copyText(url).then(function () { said("Link copied"); }, function () { said("Copy failed"); });
+  });
   if (rail) rail.addEventListener("click", function (e) {
     var a = e.target.closest(".pcard__open"); if (!a) return;
     if (openProject(Number(a.dataset.index), a)) { e.preventDefault(); e.stopPropagation(); }
