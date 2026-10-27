@@ -1,0 +1,78 @@
+# Pages CMS (https://app.pagescms.org): log in with GitHub to edit the site's projects and socials.
+# Every save is a commit to this repo, and GitHub Pages republishes the site about a minute later.
+media:
+  input: assets/uploads
+  output: assets/uploads
+
+content:
+  - name: projects
+    label: Projects
+    description: Cards in the Projects section. Drag to reorder; the first one shows first.
+    type: file
+    path: content/projects.json
+    format: json
+    list: true
+    fields:
+      - name: title
+        label: Title
+        type: string
+        required: true
+      - name: published
+        label: Show on the site
+        type: boolean
+        default: true
+      - name: summary
+        label: Short summary (on the card)
+        type: text
+        required: true
+      - name: description
+        label: Full description (blank line between paragraphs)
+        type: text
+      - name: tags
+        label: Tags
+        type: string
+        list: true
+      - name: cover
+        label: Card image
+        type: image
+      - name: screenshots
+        label: Screenshots (shown in the 3D carousel)
+        type: image
+        list: true
+      - name: github
+        label: GitHub link
+        type: string
+      - name: website
+        label: Live link
+        type: string
+      - name: downloads
+        label: Downloads (EXE, APK, ZIP...)
+        type: object
+        list: true
+        fields:
+          - name: label
+            label: Button text, e.g. "Windows (.exe)"
+            type: string
+          - name: file
+            label: Upload a file (under 100 MB)
+            type: file
+          - name: url
+            label: Or link to a file (e.g. a GitHub Release)
+            type: string
+
+  - name: socials
+    label: Social links
+    description: Buttons in the Contact section.
+    type: file
+    path: content/socials.json
+    format: json
+    list: true
+    fields:
+      - name: label
+        label: Name, e.g. Instagram
+        type: string
+        required: true
+      - name: url
+        label: Link
+        type: string
+        required: true
