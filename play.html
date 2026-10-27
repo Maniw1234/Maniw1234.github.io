@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Ride mode | Mani</title>
-  <meta name="description" content="Ride Mani's blacked-out superbike yourself through ten zones: jumps with flips and spins, traffic, a dirt bike in the desert, sparkles to collect and a ghost of your best run.">
+  <meta name="description" content="Ride Mani's blacked-out superbike or drive a supercar through ten zones: race the grid solo or race friends with a room code, throw flips and spins off the jumps and chase the ghost of your best run.">
   <meta name="theme-color" content="#05060b">
   <meta name="color-scheme" content="dark">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mani">
   <meta property="og:title" content="Ride mode | Mani">
-  <meta property="og:description" content="Ride the blacked-out superbike yourself through ten zones.">
+  <meta property="og:description" content="Race the superbike or a supercar through ten zones, solo or with friends.">
   <meta property="og:url" content="https://maniw1234.github.io/play.html">
   <meta property="og:image" content="https://maniw1234.github.io/assets/img/og.jpg">
   <meta name="twitter:card" content="summary_large_image">
@@ -125,8 +125,17 @@
     <div class="screen__card">
       <p class="kicker">// ride mode</p>
       <h1 id="st-title">Take it for a <span class="g-text">ride.</span></h1>
-      <p class="screen__lead">Race supercars through ten zones, from Midtown to the stadium. Throw flips and spins off the jumps, beat your best time and race the ghost of your best run. In the Red Desert your bike turns into a dirt bike.</p>
+      <p class="screen__lead">Race through ten zones, from Midtown to the stadium, on the H2 or behind the wheel of a supercar. Throw flips and spins off the jumps, beat your best time and race the ghost of your best run.</p>
       <p class="screen__meta" id="st-length"></p>
+      <div class="mode" role="group" aria-label="Game mode">
+        <button type="button" class="mode__btn" id="st-solo-btn" aria-pressed="true">Solo</button>
+        <button type="button" class="mode__btn" id="st-multi-btn" aria-pressed="false">Multiplayer</button>
+      </div>
+      <fieldset class="pick">
+        <legend>Your ride</legend>
+        <div class="pick__list" id="st-pick"></div>
+        <p class="pick__note">Only the H2 has engine sound for now.</p>
+      </fieldset>
       <p class="screen__race" id="st-race" hidden></p>
       <ul class="keys keys--desk">
         <li><kbd>W</kbd><kbd>↑</kbd> Gas</li>
@@ -140,15 +149,37 @@
         <li class="keys__wide">In the air: <kbd>W</kbd><kbd>S</kbd> flip, <kbd>A</kbd><kbd>D</kbd> spin. Land straight to score.</li>
       </ul>
       <p class="keys keys--touch">Left thumb steers. Right thumb works the gas, brake and nitro. In the air, gas and brake flip the bike and the arrows spin it. Land straight to score.</p>
-      <div class="screen__cta">
+      <div class="screen__cta" id="st-solo">
         <button class="btn btn--primary" id="st-go" type="button">Start riding</button>
         <a class="btn btn--ghost" href="./">Back to the site</a>
+      </div>
+      <div class="mp" id="st-multi" hidden>
+        <div id="mp-join-box">
+          <label class="mp__field"><span>Your name</span><input id="mp-name" type="text" maxlength="14" autocomplete="nickname" spellcheck="false" placeholder="Rider"></label>
+          <div class="mp__row">
+            <button class="btn btn--primary" id="mp-host" type="button">Host a game</button>
+            <span class="mp__or">or</span>
+            <input class="mp__code-in" id="mp-code" type="text" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Room code">
+            <button class="btn btn--ghost" id="mp-join" type="button">Join</button>
+          </div>
+          <p class="mp__hint">The host shares a four-letter code. Up to 6 players, no AI cars.</p>
+        </div>
+        <div class="mp__lobby" id="mp-lobby" hidden>
+          <p class="mp__room">Room code <b id="mp-room">----</b> <button class="mp__copy" id="mp-copy" type="button">Copy invite link</button></p>
+          <ul class="mp__players" id="mp-players" aria-live="polite"></ul>
+          <div class="screen__cta">
+            <button class="btn btn--primary" id="mp-start" type="button">Start the race</button>
+            <p class="mp__wait" id="mp-wait" hidden>Waiting for the host to start</p>
+            <button class="btn btn--ghost" id="mp-leave" type="button">Leave room</button>
+          </div>
+        </div>
+        <p class="mp__status" id="mp-status" role="status"></p>
       </div>
       <div class="screen__foot">
         <p id="st-best">No best time yet</p>
         <button class="sound" type="button" data-sound aria-pressed="true"><i aria-hidden="true"></i><span>Sound on</span></button>
       </div>
-      <p class="screen__credit">3D motorcycle: <a href="https://sketchfab.com/3d-models/kawashaki-ninja-h2-73eebe213a3043d1a1eb277c8ce05b5f" rel="noopener">&ldquo;Kawashaki ninja h2&rdquo;</a> by <a href="https://sketchfab.com/huy14320000006" rel="noopener">Jonrss</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web). Dirt bike: <a href="https://sketchfab.com/3d-models/honda-450r-dirt-bike-eb01f118459e4074b55034ec5907c4de" rel="noopener">&ldquo;Honda 450R Dirt bike&rdquo;</a> by <a href="https://sketchfab.com/J6vxplayz" rel="noopener">J6HDCreations</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. Race cars: <a href="https://sketchfab.com/3d-models/lambo-v12-vision-gran-turismo-2020-0a0226e9545d43ce87ab033501920320" rel="noopener">&ldquo;Lambo V12 Vision Gran Turismo 2020&rdquo;</a> by <a href="https://sketchfab.com/sohyalebret" rel="noopener">kevin (ケビン)</a> and <a href="https://sketchfab.com/3d-models/sketchfab-texturing-challenge-sports-car-base-63b728d04de74575bc1c8029da8946f3" rel="noopener">&ldquo;Sketchfab Texturing Challenge: Sports Car Base&rdquo;</a> by <a href="https://sketchfab.com/kryik1023" rel="noopener">Renafox</a> (both repainted for the grid), and <a href="https://sketchfab.com/3d-models/2024-porsche-992-gt3-r-b76c9b2ae2d548c3869426eac4ab8a19" rel="noopener">&ldquo;2024 Porsche 992 GT3 R&rdquo;</a> by <a href="https://sketchfab.com/Tyler_Dave" rel="noopener">Dave Love SketchFab</a>, all <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. All models simplified and compressed for the web.</p>
+      <p class="screen__credit">3D motorcycle: <a href="https://sketchfab.com/3d-models/kawashaki-ninja-h2-73eebe213a3043d1a1eb277c8ce05b5f" rel="noopener">&ldquo;Kawashaki ninja h2&rdquo;</a> by <a href="https://sketchfab.com/huy14320000006" rel="noopener">Jonrss</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web). Race cars: <a href="https://sketchfab.com/3d-models/lambo-v12-vision-gran-turismo-2020-0a0226e9545d43ce87ab033501920320" rel="noopener">&ldquo;Lambo V12 Vision Gran Turismo 2020&rdquo;</a> by <a href="https://sketchfab.com/sohyalebret" rel="noopener">kevin (ケビン)</a> and <a href="https://sketchfab.com/3d-models/sketchfab-texturing-challenge-sports-car-base-63b728d04de74575bc1c8029da8946f3" rel="noopener">&ldquo;Sketchfab Texturing Challenge: Sports Car Base&rdquo;</a> by <a href="https://sketchfab.com/kryik1023" rel="noopener">Renafox</a> (both repainted for the grid), and <a href="https://sketchfab.com/3d-models/2024-porsche-992-gt3-r-b76c9b2ae2d548c3869426eac4ab8a19" rel="noopener">&ldquo;2024 Porsche 992 GT3 R&rdquo;</a> by <a href="https://sketchfab.com/Tyler_Dave" rel="noopener">Dave Love SketchFab</a>, all <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. All models simplified and compressed for the web. Multiplayer connects players directly through <a href="https://peerjs.com/" rel="noopener">PeerJS</a>.</p>
     </div>
   </section>
 
@@ -171,6 +202,7 @@
       <p class="kicker">// finished</p>
       <h2 id="d-title" class="screen__time"><span class="g-text" id="d-time">0:00.0</span></h2>
       <p class="screen__lead" id="d-best"></p>
+      <ol class="standings" id="d-standings" hidden></ol>
       <dl class="stats">
         <div id="d-place-wrap" hidden><dt>Place</dt><dd id="d-place"></dd></div>
         <div><dt>Sparkles</dt><dd id="d-orbs"></dd></div>

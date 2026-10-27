@@ -1,4 +1,4 @@
-// Ride mode: the course, its zones, traffic and events, and the bike's handling. No three.js in here, so it can be
+// Ride mode: the course, its zones, the AI cars and events, and the handling of the bike and the cars. No three.js in here, so it can be
 // tested on its own. Units are metres (the bike is about 2 m long). The bike faces +x at yaw 0 and moves along
 // (cos yaw, -sin yaw). "s" is metres along the road, "lat" metres to the left of its centre line.
 
@@ -10,7 +10,7 @@ const ZONE_DEF = [
   { name: "Midtown", kind: "city", ramps: 2, pieces: [[520, 0], [90, 90], [420, 0], [90, -90], [480, 0], [90, -90], [320, 0], [90, 90], [300, 0]] },
   { name: "Harbor Bridge", kind: "bridge", ramps: 1, pieces: [[160, 20], [1560, 0], [220, -20]] },
   { name: "Underpass", kind: "tunnel", ramps: 1, pieces: [[300, 0], [800, -50], [600, 30], [300, 0]] },
-  { name: "Red Desert", kind: "desert", ramps: 3, mega: 1, dirt: true, pieces: [[500, 0], [600, 60], [450, 0], [550, -80]] },
+  { name: "Red Desert", kind: "desert", ramps: 3, mega: 1, pieces: [[500, 0], [600, 60], [450, 0], [550, -80]] },
   { name: "Pine Switchbacks", kind: "forest", ramps: 1, pieces: [[220, 0], [130, 150], [220, 0], [130, -150], [260, 0], [130, 150], [260, 0], [320, -60], [380, 0]] },
   { name: "Summit Pass", kind: "snow", ramps: 2, pieces: [[300, 40], [320, -60], [420, 0], [300, 70], [300, -50], [400, 0]] },
   { name: "Neon Highway", kind: "cyber", ramps: 2, mega: 1, pieces: [[800, 0], [700, 30], [650, 0]] },
@@ -42,7 +42,6 @@ export function buildCourse() {
   C.walls = zones.filter((zn) => zn.kind === "tunnel" || zn.kind === "bridge").map((zn) => [zn.s + 10, zn.e - 10]);
   C.tunnel = (() => { const t = zones.find((zn) => zn.kind === "tunnel"); return t && [t.s + 10, t.e - 10]; })();
   C.bridge = (() => { const t = zones.find((zn) => zn.kind === "bridge"); return t && [t.s, t.e]; })();
-  C.dirt = zones.filter((zn) => zn.dirt).map((zn) => [zn.s, zn.e]);
 
   // jumps: spread through each zone on straights; mega ramps send you high enough for doubles
   C.ramps = [];
@@ -116,11 +115,13 @@ export function locate(C, px, pz, hint, wide) {
 }
 
 /* ---------------- handling ---------------- */
-export const TUNE = { vmax: 74, vnitro: 90, acc: 13, nitroAcc: 9, brake: 26, grip: 32, offMax: 28, dirtMax: 48, g: 20, flip: 5.4, spin: 6.8 };
+export const TUNE = { vmax: 74, vnitro: 90, acc: 13, nitroAcc: 9, brake: 26, grip: 32, offMax: 28, g: 20, flip: 5.4, spin: 6.8 };
+// a car corners flat (a little body roll the other way) and pulls no wheelies; the pace is the same so races stay fair
+export const CAR = { grip: 30, roll: -0.05 };
 
 export function newRider(C, s = 4) {
   const p = at(C, s);
-  return { x: p[0], z: p[1], yaw: p[2], v: 0, y: 0, vy: 0, steer: 0, lean: 0, pitch: 0, nitro: 0.5, boosting: false, idx: s, lat: 0, off: false, air: false, ramp: -1, far: 0, best: s, wheelie: 0, flip: 0, spin: 0, airT: 0, clock: 0, wobble: 0, slow: 0, dirt: false };
+  return { x: p[0], z: p[1], yaw: p[2], v: 0, y: 0, vy: 0, steer: 0, lean: 0, pitch: 0, nitro: 0.5, boosting: false, idx: s, lat: 0, off: false, air: false, ramp: -1, far: 0, best: s, wheelie: 0, flip: 0, spin: 0, airT: 0, clock: 0, wobble: 0, slow: 0, car: false };
 }
 
 // what a set of rotations is called
@@ -138,7 +139,6 @@ export function step(C, R, input, dt) {
   const ev = {};
   const T = TUNE;
   R.clock += dt;
-  R.dirt = inRange(C.dirt, R.idx);
   // on the ground the keys ride the bike; in the air they throw tricks (W/S flip, A/D spin)
   const steerIn = R.air ? 0 : input.left - input.right;
   R.steer += (steerIn - R.steer) * (1 - Math.exp(-dt * 7));
@@ -154,18 +154,18 @@ export function step(C, R, input, dt) {
   if (input.down) a -= v > 0.5 ? T.brake * input.down : (v > -6 ? 5 * input.down : 0); // brake, then roll back slowly
   if (input.up && v < -0.5) a += T.brake;
   a -= Math.sign(v) * (0.5 + 0.00035 * v * v);
-  const offMax = R.dirt ? T.dirtMax : T.offMax; // the dirt bike is happy off the track
-  if (R.off && av > offMax) a -= Math.sign(v) * 16;
-  else if (R.off && !R.dirt) a -= Math.sign(v) * (1.5 + av * 0.05);
+  if (R.off && av > T.offMax) a -= Math.sign(v) * 16;
+  else if (R.off) a -= Math.sign(v) * (1.5 + av * 0.05);
   if (R.air) a = 0;
   const nv = v + a * dt;
   R.v = Math.abs(nv) < 0.05 && !input.up && !input.down ? 0 : (Math.sign(nv) !== Math.sign(v) && v !== 0 && !input.down && !input.up ? 0 : nv);
   R.wobble = Math.max(0, R.wobble - dt);
   // turning: lean follows the turn the way a real bike leans into it
-  const turnMax = Math.min(2.1, T.grip / Math.max(av, 1)) * smooth01(av / 3);
+  const turnMax = Math.min(2.1, (R.car ? CAR.grip : T.grip) / Math.max(av, 1)) * smooth01(av / 3);
   const yawRate = R.steer * turnMax * Math.sign(R.v || 1);
   R.yaw += yawRate * dt + (R.wobble > 0 ? Math.sin(R.clock * 19) * 0.25 * dt * R.wobble : 0);
-  const leanWant = R.air ? R.lean * 0.98 : -Math.atan(R.v * yawRate / 9.8) + (R.wobble > 0 ? Math.sin(R.clock * 13) * 0.2 * R.wobble : 0);
+  const lat = R.v * yawRate / 9.8, shake = R.wobble > 0 ? Math.sin(R.clock * 13) * 0.2 * R.wobble : 0;
+  const leanWant = R.air ? R.lean * 0.98 : R.car ? clamp(lat, -3, 3) * CAR.roll + shake * 0.3 : -Math.atan(lat) + shake;
   R.lean += (clamp(leanWant, -1.05, 1.05) - R.lean) * (1 - Math.exp(-dt * 8));
   R.x += Math.cos(R.yaw) * R.v * dt; R.z -= Math.sin(R.yaw) * R.v * dt;
 
@@ -220,7 +220,7 @@ export function step(C, R, input, dt) {
     }
   }
   // a little wheelie on full throttle at low speed
-  R.wheelie += ((input.up && R.v > 1 && R.v < 22 && !R.air ? 0.45 * (1 - R.v / 22) : 0) - R.wheelie) * (1 - Math.exp(-dt * 4));
+  R.wheelie += ((input.up && R.v > 1 && R.v < 22 && !R.air && !R.car ? 0.45 * (1 - R.v / 22) : 0) - R.wheelie) * (1 - Math.exp(-dt * 4));
 
   // boost pads
   C.pads.forEach((p, i) => {
@@ -236,7 +236,7 @@ export function step(C, R, input, dt) {
   racing(C, R, dt, ev);
   events(C, R, dt, ev);
   // lost: too far from the road for a few seconds puts you back on it
-  R.far = L.d > (R.dirt ? 70 : 45) ? R.far + dt : 0;
+  R.far = L.d > 45 ? R.far + dt : 0;
   if (R.far > 2.5) { reset(C, R); ev.reset = true; }
   return ev;
 }
@@ -324,8 +324,10 @@ function racing(C, R, dt, ev) {
   }
 }
 // where you are in the race: 1 is in front
-export function place(C, R, done) {
-  return 1 + C.racers.filter((c) => (done ? c.done && c.time < R.clock : c.s > R.idx)).length;
+// others: the other players in a multiplayer race, as { idx, done, time }
+export function place(C, R, done, others = []) {
+  const ahead = (s, d, t) => (done ? d && t < R.clock : s > R.idx);
+  return 1 + C.racers.filter((c) => ahead(c.s, c.done, c.time)).length + others.filter((o) => ahead(o.idx, o.done, o.time)).length;
 }
 
 export function reset(C, R) {

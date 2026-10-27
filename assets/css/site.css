@@ -102,6 +102,8 @@ main { position: relative; z-index: 2; }
 .hero__roles { margin-top: 18px; display: flex; align-items: center; gap: 12px; font-size: clamp(16px, 1.7vw, 22px); font-weight: 700; color: var(--muted); }
 .hero__roles i { width: 5px; height: 5px; border-radius: 50%; background: var(--violet); }
 .hero__text { margin-top: 12px; max-width: 30em; color: var(--muted); }
+/* the lit floor grid runs behind the hero copy; a soft shadow keeps the lines from reading as strike-throughs */
+.hero__roles, .hero__text, .hero .kicker { text-shadow: 0 0 6px rgba(6, 8, 16, .95), 0 0 14px rgba(6, 8, 16, .8); }
 .hero__cta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 12px; }
 .hero__cta--center { justify-content: center; }
 .cue { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
