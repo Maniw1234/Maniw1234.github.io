@@ -30,7 +30,7 @@
   <svg class="svg-defs" aria-hidden="true" focusable="false"><defs><linearGradient id="spark-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4796e3"/><stop offset=".55" stop-color="#9177c7"/><stop offset="1" stop-color="#ca6673"/></linearGradient></defs></svg>
 
   <!-- 3D ride (WebGL). Without it, the poster image below is shown instead. -->
-  <canvas id="scene" aria-hidden="true"></canvas>
+  <canvas id="scene" aria-hidden="true" data-model="assets/models/bike.glb" data-model-yaw="3.14159" data-model-exhaust="-0.81,0.53,0.21" data-model-tail="-0.97,0.8,0" data-model-head="0.9,0.78,0"></canvas>
   <div class="fallback" aria-hidden="true"></div>
   <div class="flash" id="flash" aria-hidden="true"></div>
 
@@ -160,6 +160,7 @@
     <p>© <span id="year">2026</span> Mani · <a href="https://github.com/Maniw1234/Maniw1234.github.io" rel="noopener">Source of this site</a></p>
     <p class="footer__app"><strong>Hatzolah Archive Uploader</strong> is a personal, single-user tool run by its owner. It uploads audio archive files and their metadata from the owner's own collection to the owner's own Google Drive, using the Google Drive API. It has no other users and no public sign-up, and it does not collect, store, or share anyone else's data.</p>
     <p><a href="privacy.html">Privacy Policy</a> · <a href="tos.html">Terms of Service</a></p>
+    <p class="footer__credit">3D motorcycle: <a href="https://sketchfab.com/3d-models/kawashaki-ninja-h2-73eebe213a3043d1a1eb277c8ce05b5f" rel="noopener">&ldquo;Kawashaki ninja h2&rdquo;</a> by <a href="https://sketchfab.com/huy14320000006" rel="noopener">Jonrss</a>, licensed under <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web).</p>
   </footer>
 
   <!-- Full-screen project view, filled by ui.js from content/projects.json -->
