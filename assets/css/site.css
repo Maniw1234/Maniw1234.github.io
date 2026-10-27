@@ -75,6 +75,8 @@ html:not(.js) .loader, .loader[hidden] { display: none; }
 .nav__links { display: flex; gap: 2px; }
 .nav__links a { display: block; padding: 8px 14px; border-radius: 999px; color: var(--muted); text-decoration: none; font-weight: 600; font-size: 14px; }
 .nav__links a:hover, .nav__links a.is-active { color: var(--ink); background: rgba(255, 255, 255, .08); }
+.nav__links .nav__play { color: var(--ink); background: linear-gradient(var(--bg), var(--bg)) padding-box, var(--grad) border-box; border: 1px solid transparent; }
+.nav__links .nav__play:hover { background: linear-gradient(rgba(20, 22, 34, 1), rgba(20, 22, 34, 1)) padding-box, var(--grad) border-box; }
 .sound { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .05); color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
 .sound[hidden] { display: none; }
 .sound i { width: 8px; height: 8px; border-radius: 50%; background: #e2475a; box-shadow: 0 0 10px #e2475a; }
