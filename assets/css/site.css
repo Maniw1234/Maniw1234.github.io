@@ -65,7 +65,7 @@ main { position: relative; z-index: 2; }
 .sec { position: relative; min-height: 170vh; }
 .sec--hero { min-height: 160vh; }
 .sec--projects { min-height: 190vh; }
-.sec--contact { min-height: 150vh; }
+.sec--contact { min-height: 0; }
 .pin { position: sticky; top: 0; min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; justify-content: center; padding: 96px var(--pad) 40px; }
 .wrap { width: min(1180px, 100%); margin: 0 auto; }
 
@@ -81,6 +81,10 @@ main { position: relative; z-index: 2; }
 .hero__cta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 12px; }
 .hero__cta--center { justify-content: center; }
 .cue { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+.cue { white-space: nowrap; }
+.cue__t { display: none; }
+html:not(.has-gl) .cue { display: none; } /* no 3D ride: the page scrolls normally */
+@media (hover: none) and (pointer: coarse) { .cue__d { display: none; } .cue__t { display: inline; } .cue { font-size: 11px; letter-spacing: .12em; } }
 .cue i { width: 18px; height: 28px; border: 1.5px solid var(--dim); border-radius: 10px; position: relative; }
 .cue i::after { content: ""; position: absolute; left: 50%; top: 6px; width: 3px; height: 6px; margin-left: -1.5px; border-radius: 2px; background: var(--ink); animation: cue 1.6s infinite; }
 @keyframes cue { 50% { transform: translateY(7px); opacity: .3; } }
@@ -95,7 +99,7 @@ main { position: relative; z-index: 2; }
 .panel--left { margin-right: auto; margin-left: max(0px, calc((100% - 1180px) / 2)); }
 .panel--low { align-self: flex-start; }
 .panel--center { max-width: 680px; margin: 0 auto; text-align: center; }
-.sec--contact .pin { justify-content: flex-start; }
+.sec--contact .pin { position: relative; min-height: 0; padding-bottom: 28px; } /* last stop: contact panel and footer fit on one screen */
 .panel h2, .projects h2 { margin-top: 10px; font-weight: 800; letter-spacing: -.04em; line-height: 1; font-size: clamp(38px, 5.4vw, 76px); }
 .lead { margin-top: 14px; color: var(--muted); font-size: clamp(15px, 1.3vw, 18px); }
 .traits { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
