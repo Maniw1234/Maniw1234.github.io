@@ -101,76 +101,14 @@
               <button class="rbtn" type="button" data-dir="1" aria-label="Next project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
             </div>
           </div>
-          <p class="hint">Swipe or drag the cards, then open one.</p>
+          <p class="hint" id="rail-hint">Swipe or drag the cards, then open one.</p>
 
-          <div class="rail" id="rail" tabindex="0" aria-label="Project cards">
-            <article class="pcard" id="hatzolah-map" style="--a1:#ca6673;--a2:#9177c7">
-              <div class="pcard__art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12z"/><circle cx="12" cy="9" r="2.6"/></svg></div>
-              <p class="pcard__n">01</p>
-              <h3 class="pcard__t">Hatzolah Live 3D Map</h3>
-              <p class="pcard__s">An interactive live map that combines MapLibre map rendering with a Three.js 3D ambulance and animated crew elements.</p>
-              <ul class="tags"><li>MapLibre</li><li>Three.js</li><li>Real-time</li></ul>
-              <a class="btn btn--primary pcard__open" href="#hatzolah-map-details">Open project</a>
-              <div class="pcard__full" id="hatzolah-map-details">
-                <h2 class="pfull__title">Hatzolah Live 3D Map</h2>
-                <p class="pfull__tag">An interactive live map that combines MapLibre map rendering with a Three.js 3D ambulance and animated crew elements, built for real-time visualization.</p>
-                <div class="gallery" data-gallery><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure></div>
-                <div class="pfull__grid">
-                  <div class="d-block"><h3>Objective</h3><p>A live map view that makes activity easy to follow at a glance, using 3D elements instead of flat markers.</p></div>
-                  <div class="d-block"><h3>Key features</h3><ul><li>Interactive map rendering with MapLibre.</li><li>A three-dimensional ambulance model rendered with Three.js.</li><li>Animated crew elements.</li><li>Real-time visualization and interactive controls.</li></ul></div>
-                  <div class="d-block"><h3>Technical approach</h3><p>MapLibre provides the base map, and Three.js renders the 3D assets so they sit on the map and animate within it.</p></div>
-                  <div class="d-block"><h3>Note</h3><p class="d-note">An independent personal project. It isn't an official product of, or endorsed by, any Hatzolah organization. Operational data and feed sources are intentionally left out.</p></div>
-                </div>
-                <div class="pfull__links"><h3>Links &amp; downloads</h3><p class="d-note">Links and downloads for this project will be added here.</p></div>
-              </div>
-            </article>
-
-            <article class="pcard" id="shipping-tracker" style="--a1:#4796e3;--a2:#3fa8c4">
-              <div class="pcard__art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div>
-              <p class="pcard__n">02</p>
-              <h3 class="pcard__t">Shipping Tracking App</h3>
-              <p class="pcard__s">A shipping-tracking app built with Base44, focused on clear tracking information and smooth navigation.</p>
-              <ul class="tags"><li>Base44</li><li>Frontend</li><li>State</li></ul>
-              <a class="btn btn--primary pcard__open" href="#shipping-tracker-details">Open project</a>
-              <div class="pcard__full" id="shipping-tracker-details">
-                <h2 class="pfull__title">Shipping Tracking App</h2>
-                <p class="pfull__tag">A shipping-tracking application built with Base44, focused on clear tracking information, smooth page navigation, and keeping state intact as you move around.</p>
-                <div class="gallery" data-gallery><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure></div>
-                <div class="pfull__grid">
-                  <div class="d-block"><h3>Objective</h3><p>Build a shipping-tracking app whose interface is easy to navigate and behaves predictably.</p></div>
-                  <div class="d-block"><h3>Key areas</h3><ul><li>Displaying tracking information clearly.</li><li>Page navigation across the app.</li><li>Interface behavior and interaction details.</li><li>State preservation, so information is kept when navigating.</li></ul></div>
-                  <div class="d-block"><h3>Technical approach</h3><p>Built with Base44 and related frontend workflows, iterating on behavior with AI-assisted development and fixing issues as they surface.</p></div>
-                </div>
-                <div class="pfull__links"><h3>Links &amp; downloads</h3><p class="d-note">Links and downloads for this project will be added here.</p></div>
-              </div>
-            </article>
-
-            <article class="pcard" id="audio-archive" style="--a1:#9177c7;--a2:#4796e3">
-              <div class="pcard__art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/></svg></div>
-              <p class="pcard__n">03</p>
-              <h3 class="pcard__t">Audio Archive &amp; Automation</h3>
-              <p class="pcard__s">Automation for a personal audio archive: transcription, file organization, and backend workflows.</p>
-              <ul class="tags"><li>Transcription</li><li>Automation</li><li>Google Drive API</li></ul>
-              <a class="btn btn--primary pcard__open" href="#audio-archive-details">Open project</a>
-              <div class="pcard__full" id="audio-archive-details">
-                <h2 class="pfull__title">Audio Archive &amp; Automation</h2>
-                <p class="pfull__tag">Automation for a personal audio archive: transcription, file organization, and backend workflows, including Hatzolah Archive Uploader, which files recordings into the owner's own Google Drive.</p>
-                <div class="gallery" data-gallery><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure><figure class="shot shot--empty"><span>Screenshot coming soon</span></figure></div>
-                <div class="pfull__grid">
-                  <div class="d-block"><h3>Objective</h3><p>Automate the repetitive parts of keeping an audio archive, so recordings are processed, transcribed, and filed consistently.</p></div>
-                  <div class="d-block"><h3>Key components</h3><ul><li>Processing of audio recordings.</li><li>Transcription of recordings into text.</li><li>File organization and naming.</li><li>Supporting backend workflows.</li></ul></div>
-                  <div class="d-block"><h3>Hatzolah Archive Uploader</h3><p>Hatzolah Archive Uploader is a personal, single-user tool run by its owner. It uploads audio archive files and their metadata from the owner's own collection to the owner's own Google Drive, using the Google Drive API. It has no other users and no public sign-up, and it does not collect, store, or share anyone else's data.</p><p class="d-links"><a href="privacy.html">Privacy Policy</a> · <a href="tos.html">Terms of Service</a></p></div>
-                  <div class="d-block"><h3>Note</h3><p class="d-note">Kept high-level on purpose. Infrastructure, endpoints, credentials, and the recordings themselves are private.</p></div>
-                </div>
-                <div class="pfull__links"><h3>Links &amp; downloads</h3><p class="d-note">Links and downloads for this project will be added here.</p></div>
-              </div>
-            </article>
-
-            <article class="pcard pcard--soon" aria-label="More projects coming soon">
+          <div class="rail" id="rail" tabindex="0" aria-label="Project cards" aria-live="polite">
+            <article class="pcard pcard--soon">
               <div class="pcard__art" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
-              <p class="pcard__n">Next</p>
-              <h3 class="pcard__t">More on the way</h3>
-              <p class="pcard__s">New projects land here as they ship.</p>
+              <p class="pcard__n">Soon</p>
+              <h3 class="pcard__t">Projects on the way</h3>
+              <p class="pcard__s"><noscript>Turn on JavaScript to see the projects. </noscript>Meanwhile, see my work on <a href="https://github.com/Maniw1234" rel="noopener">GitHub</a>.</p>
             </article>
           </div>
         </div>
@@ -211,6 +149,7 @@
             <a class="btn btn--primary" href="mailto:weinsteinmenachem1@gmail.com">Email me</a>
             <a class="btn btn--ghost" href="https://github.com/Maniw1234" rel="noopener">GitHub</a>
           </div>
+          <ul class="socials" id="socials"></ul>
           <p class="mono">weinsteinmenachem1@gmail.com</p>
         </div>
       </div>
@@ -219,10 +158,11 @@
 
   <footer class="footer">
     <p>© <span id="year">2026</span> Mani · <a href="https://github.com/Maniw1234/Maniw1234.github.io" rel="noopener">Source of this site</a></p>
-    <p>Hatzolah Archive Uploader is a personal, single-user tool that uploads the owner's own audio archive files to the owner's own Google Drive. <a href="privacy.html">Privacy Policy</a> · <a href="tos.html">Terms of Service</a></p>
+    <p class="footer__app"><strong>Hatzolah Archive Uploader</strong> is a personal, single-user tool run by its owner. It uploads audio archive files and their metadata from the owner's own collection to the owner's own Google Drive, using the Google Drive API. It has no other users and no public sign-up, and it does not collect, store, or share anyone else's data.</p>
+    <p><a href="privacy.html">Privacy Policy</a> · <a href="tos.html">Terms of Service</a></p>
   </footer>
 
-  <!-- Full-screen project view. ui.js fills it from the card's .pcard__full block. -->
+  <!-- Full-screen project view, filled by ui.js from content/projects.json -->
   <dialog class="pview" id="project-view" aria-labelledby="pview-title">
     <div class="pview__top">
       <p class="eyebrow" id="pview-n"></p>
