@@ -8,7 +8,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { buildBike } from "./bike.js";
-import { buildCourse, newRider, step, reset, rewind, at, HALF, TUNE } from "./course.js";
+import { buildCourse, newRider, step, reset, rewind, at, addRacers, place, HALF, TUNE } from "./course.js";
 import { buildZones, instanced } from "./zones.js";
 
 const $ = (id) => document.getElementById(id);
@@ -278,7 +278,17 @@ const LOOKS = {
   disc: () => new THREE.MeshStandardMaterial({ color: 0x8d929c, metalness: 1, roughness: 0.32 }),
   metal: () => new THREE.MeshStandardMaterial({ color: 0x2a2c31, metalness: 1, roughness: 0.35 }),
   engine: () => new THREE.MeshStandardMaterial({ color: 0x18191c, metalness: 0.8, roughness: 0.45 }),
-  glass: () => new THREE.MeshPhysicalMaterial({ color: 0x2b3038, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.45, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false })
+  glass: () => new THREE.MeshPhysicalMaterial({ color: 0x2b3038, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.45, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false }),
+  // dirt bike: glossy race plastics, anodised alloy, a knobbly black tyre
+  redPlastic: () => new THREE.MeshPhysicalMaterial({ color: 0xb00a16, metalness: 0, roughness: 0.42, clearcoat: 0.45, clearcoatRoughness: 0.2, envMapIntensity: 0.6, side: THREE.DoubleSide }),
+  whitePlastic: () => new THREE.MeshPhysicalMaterial({ color: 0xe8e8ea, metalness: 0, roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.15, side: THREE.DoubleSide }),
+  alloy: () => new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 1, roughness: 0.32, side: THREE.DoubleSide }),
+  gold: () => new THREE.MeshStandardMaterial({ color: 0xd4a040, metalness: 1, roughness: 0.25, side: THREE.DoubleSide }),
+  chrome: () => new THREE.MeshStandardMaterial({ color: 0xe0e4ea, metalness: 1, roughness: 0.08, side: THREE.DoubleSide }),
+  redAlloy: () => new THREE.MeshStandardMaterial({ color: 0xb01020, metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }),
+  seat: () => new THREE.MeshStandardMaterial({ color: 0x15161a, metalness: 0, roughness: 0.75, side: THREE.DoubleSide }),
+  knobby: () => new THREE.MeshStandardMaterial({ color: 0x111113, metalness: 0, roughness: 0.95, side: THREE.DoubleSide }),
+  pipe: () => new THREE.MeshStandardMaterial({ color: 0x6a6e76, metalness: 1, roughness: 0.4, side: THREE.DoubleSide })
 };
 let modelReady = false;
 // two bikes: the H2 on the road and a dirt bike in the desert. Each has its own model, lights, exhaust and wheels.
@@ -312,7 +322,8 @@ function loadModel(url, kind) {
         const ref = mine.reduce((a, p) => (p.c.y > a.c.y ? p : a)).c;
         return pivotAt(mine.filter((p) => Math.hypot(p.c.x - ref.x, p.c.y - ref.y) < 0.03).map((p) => p.o));
       });
-      const rig = { holder, wheels: axles[0] && axles[1] ? axles : base.wheels, ex: vec(cfg.exhaust), tail: vec(cfg.tail), head: vec(cfg.head) };
+      const rig = { holder, wheels: axles[0] && axles[1] ? axles : base.wheels, ex: vec(cfg.exhaust), tail: vec(cfg.tail), head: vec(cfg.head), lights: cfg.lights !== false, mats: [] };
+      holder.traverse((o) => { if (o.isMesh && !rig.mats.includes(o.material)) rig.mats.push(o.material); });
       if (rig.tail) { rig.tailObj = new THREE.Object3D(); rig.tailObj.position.copy(rig.tail); body.add(rig.tailObj); }
       body.add(holder); rigs[kind] = rig;
       if (kind === "road") {
@@ -336,10 +347,98 @@ function useBike(kind, force) {
   if (rig.ex) flames.position.copy(rig.ex);
   if (rig.tail) tailGlow.position.copy(rig.tail);
   if (rig.head) { headGlow.position.copy(rig.head); spot.position.copy(rig.head); spot.target.position.set(rig.head.x + 12, 0, 0); }
+  headGlow.visible = tailGlow.visible = trail.visible = rig.lights; spot.intensity = rig.lights ? 60 : 0; // a race dirt bike has no lights
+}
+/* ---------------- the bike swap: a glowing ring sweeps nose to tail, turning one bike into the other ---------------- */
+renderer.localClippingEnabled = true;
+const swap = { on: false, t: 0, from: null, to: null, keep: new THREE.Plane(), cut: new THREE.Plane(), swapped: false };
+const swapRing = new THREE.Mesh(new THREE.RingGeometry(0.78, 0.95, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+swapRing.visible = false; scene.add(swapRing);
+const swapDisc = new THREE.Mesh(new THREE.CircleGeometry(0.95, 48), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+swapRing.add(swapDisc);
+const SWAP_T = 1.3; // seconds (game time, slowed down while it runs)
+function startSwap(kind) {
+  if (!rigs.road || !rigs.dirt || swap.on) { useBike(kind); snd.bike = kind; return; }
+  Object.assign(swap, { on: true, t: 0, from: rigs[rider], to: rigs[kind], kind, swapped: false }); rider = kind;
+  swap.from.mats.forEach((m) => { m.clippingPlanes = [swap.keep]; m.needsUpdate = true; });
+  swap.to.mats.forEach((m) => { m.clippingPlanes = [swap.cut]; m.needsUpdate = true; });
+  swap.to.holder.visible = true; swapRing.visible = true;
+  const col = kind === "dirt" ? 0xffa040 : 0x6ac8ff; swapRing.material.color.setHex(col); swapDisc.material.color.setHex(col);
+  big(kind === "dirt" ? "Dirt bike" : "Back on the H2", "is-zone"); flash(kind === "dirt" ? "#ffa040" : "#6ac8ff"); shake = Math.max(shake, 0.2);
+  burst(tmp.set(R.x, 0.4, R.z), 160, tmp2.set(0, 0.5, 0), 2.4, 6, kind === "dirt" ? 0xc89a68 : 0x9ad8ff, 1.2, 2);
+}
+function swapTick(dt) {
+  if (!swap.on) return;
+  swap.t += dt;
+  const u = smooth(0.1, 1, swap.t / SWAP_T), x = 1.25 - 2.5 * u; // sweep plane, in bike units along the bike
+  bike.updateMatrixWorld();
+  const n = tmp.set(1, 0, 0).transformDirection(bike.matrixWorld), pt = tmp2.set(x, 0, 0).applyMatrix4(bike.matrixWorld);
+  swap.cut.setFromNormalAndCoplanarPoint(n, pt); // new bike shows ahead of the ring
+  swap.keep.copy(swap.cut).negate(); // old bike shows behind it
+  swapRing.position.copy(pt).addScaledVector(tmp3.set(0, 1, 0).transformDirection(bike.matrixWorld), 0.6);
+  swapRing.quaternion.setFromUnitVectors(tmp3.set(0, 0, 1), n);
+  const pulse = 1 + 0.08 * Math.sin(swap.t * 40); swapRing.scale.setScalar(pulse);
+  if (rnd() < 0.9) burst(swapRing.position, 6, n.clone().negate(), 1.6, 5, swapRing.material.color, 0.5, 2);
+  if (!swap.swapped && u > 0.5) { swap.swapped = true; snd.bike = swap.kind; }
+  if (swap.t >= SWAP_T) {
+    swap.on = false; swapRing.visible = false;
+    [swap.from, swap.to].forEach((r) => r.mats.forEach((m) => { m.clippingPlanes = null; m.needsUpdate = true; }));
+    useBike(swap.kind, true); shake = Math.max(shake, 0.15);
+  }
 }
 function ready() { requestAnimationFrame(() => requestAnimationFrame(() => window.__load && window.__load.done())); }
 if (window.__load) window.__load.set(0.1);
 loadModel(canvas.dataset.model || "assets/models/bike.glb", "road");
+
+/* ---------------- the race: rival cars from assets/models/racers.json ---------------- */
+const rivals = [];
+function fitCar(src, m, color) {
+  const root = new THREE.Group(), body = src;
+  body.rotation.y = Number(m.yaw || 0); body.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(body), size = box.getSize(new THREE.Vector3());
+  body.scale.multiplyScalar((m.length || 4.5) / Math.max(size.x, size.z)); body.updateMatrixWorld(true); box.setFromObject(body);
+  const c = box.getCenter(new THREE.Vector3()); body.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
+  root.add(body); root.updateMatrixWorld(true); box.setFromObject(body); box.getSize(size);
+  // each car gets its own copy of the paint so a grid can mix colours
+  body.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = o.material.clone(); o.material.side = THREE.DoubleSide;
+    if (color && o.material.name === m.paint) { const mt = o.material; mt.color.set(color); mt.metalness = Math.max(mt.metalness, 0.55); mt.roughness = Math.min(mt.roughness, 0.32); if ("clearcoat" in mt) { mt.clearcoat = Math.max(mt.clearcoat, 0.8); mt.clearcoatRoughness = 0.08; } }
+  });
+  const wheels = [], bb = new THREE.Box3(), ce = new THREE.Vector3();
+  const found = []; body.traverse((o) => { if (/^wheel_/.test(o.name)) found.push(o); });
+  found.forEach((o) => { bb.setFromObject(o); bb.getCenter(ce); const pv = new THREE.Group(); pv.position.copy(root.worldToLocal(ce.clone())); root.add(pv); pv.attach(o); wheels.push(pv); });
+  // tail and head lights so they read at night
+  const lights = [];
+  [-1, 1].forEach((sd) => {
+    const t = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0xff2030, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })); t.scale.setScalar(0.38); t.position.set(-size.x / 2 - 0.05, size.y * 0.55, sd * size.z * 0.36); root.add(t); lights.push(t);
+    const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0xe8f0ff, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })); h.scale.setScalar(0.32); h.position.set(size.x / 2 + 0.05, size.y * 0.42, sd * size.z * 0.36); root.add(h); lights.push(h);
+  });
+  root.visible = false;
+  return { root, wheels, lights, radius: size.y * 0.32 || 0.33 };
+}
+fetch("assets/models/racers.json").then((r) => (r.ok ? r.json() : null)).catch(() => null).then((cfg) => {
+  if (!cfg || !Array.isArray(cfg.cars) || !cfg.cars.length) return;
+  const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+  Promise.all(cfg.cars.map((m) => new Promise((ok) => loader.load(m.file, (g) => ok(g.scene), undefined, () => ok(null))))).then((scenes) => {
+    const grid = (cfg.grid || cfg.cars.map((m, i) => ({ car: i }))).filter((g) => scenes[g.car]);
+    if (!grid.length) return;
+    const racers = addRacers(C, grid.map((g) => ({ name: g.name || cfg.cars[g.car].name, skill: g.skill, len: cfg.cars[g.car].length })));
+    grid.forEach((g, k) => { const o = fitCar(scenes[g.car].clone(true), cfg.cars[g.car], g.color); scene.add(o.root); rivals.push({ c: racers[k], ...o }); });
+    game.race = true; raceHud();
+  });
+});
+function placeRivals(dt) {
+  for (const r of rivals) {
+    const c = r.c, near = Math.abs(c.s - R.idx) < 650;
+    r.root.visible = near; if (!near) continue;
+    const p = at(C, c.s, c.lat);
+    r.root.position.set(p[0], c.y, p[1]);
+    r.root.rotation.set(0, p[2] + Math.atan2(c.steer * 5, Math.max(c.v, 5)), c.air ? clamp(c.vy * 0.03, -0.3, 0.3) : 0);
+    const roll = c.v * dt / r.radius; r.wheels.forEach((w) => { w.rotation.z -= roll; });
+  }
+}
+const ordinal = (n) => n + (n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th");
 
 /* ---------------- tail-light trail and sparks ---------------- */
 const TRAIL = LITE ? 50 : 90, trailPts = [];
@@ -457,7 +556,12 @@ const MPH = 2.23694, mph = (v) => Math.round(Math.abs(v) * MPH);
 // speed-trap bests are kept per trap, in course order
 const traps = C.events.filter((e) => e.type === "trap");
 (store.get("ride-traps") || []).forEach((b, i) => { if (traps[i] && b) traps[i].best = b; });
-const HUD = { zone: $("h-zone"), cp: $("h-cp"), time: $("h-time"), best: $("h-best"), orbs: $("h-orbs"), speed: $("h-speed"), gear: $("h-gear"), rpm: $("h-rpm"), nitro: $("h-nitro"), msg: $("h-msg"), big: $("h-big"), delta: $("h-delta"), score: $("h-score"), combo: $("h-combo"), trick: $("h-trick"), trickName: $("h-trick-name"), trickPts: $("h-trick-pts"), flash: $("h-flash") };
+const HUD = { zone: $("h-zone"), cp: $("h-cp"), time: $("h-time"), best: $("h-best"), orbs: $("h-orbs"), speed: $("h-speed"), gear: $("h-gear"), rpm: $("h-rpm"), nitro: $("h-nitro"), msg: $("h-msg"), big: $("h-big"), delta: $("h-delta"), score: $("h-score"), combo: $("h-combo"), trick: $("h-trick"), trickName: $("h-trick-name"), trickPts: $("h-trick-pts"), flash: $("h-flash"), pos: $("h-pos") };
+function raceHud() {
+  const n = rivals.length + 1;
+  HUD.pos.hidden = false; HUD.pos.innerHTML = ordinal(n) + "<small>/ " + n + "</small>";
+  $("st-race").hidden = false; $("st-race").textContent = "You start at the back of a " + n + "-strong grid. Get to the front.";
+}
 $("h-orbs-n").textContent = C.orbs.length;
 const fmt = (t) => { if (t == null) return "–"; const m = Math.floor(t / 60), s = t - m * 60; return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1); };
 HUD.best.textContent = "Best " + fmt(best && best.time);
@@ -482,7 +586,7 @@ function start() {
   initAudio(); if (snd.ctx) snd.ctx.resume();
   rewind(C); world.resetTraps();
   R = newRider(C); useBike("road"); snd.bike = "road";
-  Object.assign(game, { mode: "count", time: 0, count: 3.999, gate: 0, splits: [], orbs: 0, top: 0, air: 0, jumps: 0, rec: [], recT: 0, zone: -1, ghost: store.get("ride-ghost"), score: 0, combo: 0, comboT: 0, near: 0, bestTrick: null, slow: 1 });
+  Object.assign(game, { mode: "count", time: 0, count: 3.999, gate: 0, splits: [], orbs: 0, top: 0, air: 0, jumps: 0, rec: [], recT: 0, zone: -1, ghost: store.get("ride-ghost"), score: 0, combo: 0, comboT: 0, near: 0, bestTrick: null, slow: 1, pos: rivals.length + 1 });
   HUD.orbs.textContent = "0"; HUD.cp.textContent = "Checkpoint 0/" + (C.gates.length - 1); HUD.delta.textContent = "";
   show(null); big("3");
 }
@@ -503,6 +607,11 @@ function finish() {
   $("d-score").textContent = game.score.toLocaleString("en-US") + (game.score > bestScore && bestScore ? " (new best)" : "");
   $("d-trick").textContent = game.bestTrick ? game.bestTrick.name + " · " + game.bestTrick.pts.toLocaleString("en-US") : "None landed";
   $("d-near").textContent = String(game.near);
+  if (game.race) {
+    const pl = place(C, R, true), n = rivals.length + 1; game.place = pl;
+    $("d-place-wrap").hidden = false; $("d-place").textContent = ordinal(pl) + " of " + n;
+    $("d-best").textContent = (pl === 1 ? "You won the race! " : "You finished " + ordinal(pl) + ". ") + $("d-best").textContent;
+  }
   HUD.best.textContent = "Best " + fmt(isBest ? t : prev.time);
   game.best = isBest ? { time: t, splits: game.splits } : prev;
   const fin = at(C, C.N - 20);
@@ -538,6 +647,7 @@ function drawMap() {
   }
   mctx.globalAlpha = 1;
   C.gates.forEach((s, i) => { const [a, b] = mp(C.x[s], C.z[s]); mctx.fillStyle = i < game.gate ? "#fff" : "rgba(255,255,255,.45)"; mctx.beginPath(); mctx.arc(a, b, 5, 0, 7); mctx.fill(); });
+  rivals.forEach((r) => { const q = at(C, r.c.s, r.c.lat), [a, b] = mp(q[0], q[1]); mctx.fillStyle = "#ffb040"; mctx.beginPath(); mctx.arc(a, b, 5, 0, 7); mctx.fill(); });
   if (ghost.visible) { const [a, b] = mp(ghost.position.x, ghost.position.z); mctx.fillStyle = "#9a8cff"; mctx.beginPath(); mctx.arc(a, b, 6, 0, 7); mctx.fill(); }
   const [a, b] = mp(R.x, R.z);
   mctx.save(); mctx.translate(a, b); mctx.rotate(-R.yaw); mctx.fillStyle = "#fff"; mctx.shadowColor = "#fff"; mctx.shadowBlur = 10;
@@ -592,7 +702,7 @@ function tick(dt, raw) {
   }
   if (game.mode === "run") {
     // slow motion while the bike is in the air off a mega jump
-    game.slow += ((R.air && R.mega ? 0.45 : 1) - game.slow) * (1 - Math.exp(-Math.min(raw, 0.1) * 6)); dt *= game.slow;
+    game.slow += ((R.air && R.mega ? 0.45 : swap.on ? 0.4 : 1) - game.slow) * (1 - Math.exp(-Math.min(raw, 0.1) * 6)); dt *= game.slow;
     game.time += dt;
     // physics in small fixed steps
     let left = dt; const ev = {};
@@ -616,7 +726,11 @@ function tick(dt, raw) {
     if (ev.orb) { game.orbs += ev.orb; addScore(50 * ev.orb, false); HUD.orbs.textContent = game.orbs; burst(tmp.set(R.x, 1.3, R.z), 24, tmp2.set(0, 1, 0), 2, 5, zc.edge, 0.6, 4); }
     if (ev.hit) { shake = Math.max(shake, 0.3 * Math.min(1, ev.hit)); burst(tmp.set(R.x, 0.6, R.z), 30, tmp2.set(0, 0.6, 0), 2, 6, 0xffd0a0, 0.5); }
     if (ev.near) { game.near += ev.near; const got = addScore(150 * ev.near, true); flashMsg("Near miss +" + got + (game.combo > 1 ? "  ×" + Math.min(8, game.combo) : ""), 1000); }
-    if (ev.bump) { breakCombo(); flashMsg("Watch the traffic!", 1200); flash("#ff5a5a"); }
+    if (ev.bump) { breakCombo(); flashMsg("Contact!", 1000); flash("#ff5a5a"); }
+    if (game.race) {
+      const pos = place(C, R, false);
+      if (pos !== game.pos) { HUD.pos.innerHTML = ordinal(pos) + "<small>/ " + (rivals.length + 1) + "</small>"; HUD.pos.className = "hud__pos " + (pos < game.pos ? "is-up" : "is-down"); if (pos < game.pos) flashMsg("Overtake! " + ordinal(pos), 1100); game.pos = pos; }
+    }
     if (ev.train) { breakCombo(); big("Hit by the train", "is-zone"); flash("#ff5a5a"); shake = 0.5; }
     if (ev.avalanche) { flashMsg("Avalanche! Rocks coming down", 2200); shake = Math.max(shake, 0.2); }
     if (ev.trap) {
@@ -627,7 +741,7 @@ function tick(dt, raw) {
     if (ev.reset) { breakCombo(); flashMsg("Back on the road"); }
     // the dirt bike takes over in the desert, the H2 everywhere else
     const want = R.dirt ? "dirt" : "road";
-    if (want !== rider && rigs.dirt) { useBike(want); snd.bike = want; burst(tmp.set(R.x, 0.5, R.z), 120, tmp2.set(0, 0.6, 0), 2.2, 5, 0xc89a68, 1.1, 3); flashMsg(want === "dirt" ? "Dirt bike" : "Back on the H2", 1500); }
+    if (want !== rider && rigs.dirt && !swap.on) startSwap(want);
     // checkpoints
     if (game.gate < C.gates.length && R.best >= C.gates[game.gate]) {
       const last = game.gate === C.gates.length - 1, split = game.time; game.splits.push(split);
@@ -650,6 +764,7 @@ function tick(dt, raw) {
   const zi = blendZone(R.idx);
   if (zi !== game.zone && game.mode !== "menu") { if (game.zone >= 0) { big("Zone " + (zi + 1) + " · " + Z[zi].name, "is-zone"); flash("#" + Z[zi].edge.getHexString()); } game.zone = zi; HUD.zone.textContent = "Zone " + (zi + 1) + " · " + Z[zi].name; }
   else if (game.mode === "menu") HUD.zone.textContent = "Zone 1 · " + Z[0].name;
+  swap.dt = Math.min(raw, 0.25); // the swap runs on real time, so it never drags on a slow device
   render(t, dt, inp);
   if (++frameN % 3 === 0 || firstFrame) drawMap();
   hud();
@@ -676,6 +791,7 @@ function render(t, dt, inp) {
   game.lift += ((R.air ? 0.75 : 0) - game.lift) * (1 - Math.exp(-dt * 12));
   bike.position.set(R.x, R.y + 0.75 * wh * 0.5 + game.lift, R.z);
   bike.rotation.set(R.lean, R.yaw + R.spin, R.pitch + R.wheelie + R.flip);
+  swapTick(swap.dt);
   const spin = R.v * dt / 0.42; B.wheels[0].rotation.z -= spin; B.wheels[1].rotation.z -= spin * (inp.up && Math.abs(R.v) < 6 && game.mode === "run" ? 1.6 : 1);
   body.position.y = 0.004 * Math.sin(t * 90) * (1 - clamp(R.v / 30, 0, 1)) + 0.003 * Math.sin(t * 140) * game.rpm / 12000 - game.lift;
   tailGlow.material.opacity = 0.4 + (inp.down ? 0.5 : 0); // brighter on the brakes
@@ -719,6 +835,7 @@ function render(t, dt, inp) {
   }
   spGeo.attributes.position.needsUpdate = true; spGeo.attributes.color.needsUpdate = true;
   placeOrbs(t, R.idx - 30, R.idx + 450);
+  placeRivals(dt);
 
   // camera
   const v = Math.abs(R.v), fwd = tmp.set(Math.cos(camYaw), 0, -Math.sin(camYaw));
@@ -731,7 +848,7 @@ function render(t, dt, inp) {
     const [dist, hgt] = [[5.6 + v * 0.03, 1.9 + v * 0.008], [9 + v * 0.04, 3.4 + v * 0.01], [3.6 + v * 0.02, 0.8]][game.cam];
     const want = tmp2.set(R.x, R.y * 0.6, R.z).addScaledVector(fwd, -dist); want.y += hgt;
     // mega jumps swing the camera out to the side to watch the trick
-    game.cine += ((R.air && R.mega && !REDUCED ? 1 : 0) - game.cine) * (1 - Math.exp(-dt * 3));
+    game.cine += ((((R.air && R.mega) || swap.on) && !REDUCED ? 1 : 0) - game.cine) * (1 - Math.exp(-dt * 3));
     if (game.cine > 0.01) { const side = 7 + v * 0.05; want.lerp(tmp3.set(R.x + Math.sin(camYaw) * side - Math.cos(camYaw) * 2, R.y + 1.2, R.z + Math.cos(camYaw) * side + Math.sin(camYaw) * 2), game.cine); }
     camPos.lerp(want, firstFrame || game.mode === "count" ? 1 : 1 - Math.exp(-dt * 10));
     camLook.set(R.x, R.y * 0.8 + 0.9, R.z).addScaledVector(fwd, 5 * (1 - game.cine));
@@ -803,5 +920,7 @@ window.__game = {
   finishNow: () => { game.gate = C.gates.length - 1; R.best = C.gates[C.gates.length - 1]; },
   bike: () => ({ rider, road: !!rigs.road, dirt: !!rigs.dirt, dirtVisible: !!(rigs.dirt && rigs.dirt.holder.visible), roadVisible: !!(rigs.road && rigs.road.holder.visible), spinning: B.wheels.map((w) => w && +w.rotation.z.toFixed(2)) }),
   world,
+  race: () => ({ on: !!game.race, n: rivals.length, pos: game.pos, place: game.place, wheels: rivals.map((r) => r.wheels.length), cars: rivals.map((r) => ({ name: r.c.name, s: +r.c.s.toFixed(1), v: +r.c.v.toFixed(1), lat: +r.c.lat.toFixed(2), y: +r.c.y.toFixed(2), vis: r.root.visible, done: r.c.done })) }),
+  swapping: () => swap.on,
   tick: (dt) => tick(dt, dt), TUNE
 };
