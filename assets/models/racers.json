@@ -1,0 +1,16 @@
+{
+  "about": "The cars you race in Ride mode, read by game.js. Each car model is fitted to 'length' metres, front along the road. 'paint' is the body material whose colour each grid entry can change; 'yaw' turns the model so its nose points forward.",
+  "cars": [
+    { "file": "assets/models/cars/lambo-v12.glb", "name": "Lambo V12 Vision GT", "length": 4.6, "yaw": 1.5708, "paint": "Matte__FFFFFFFF__prim_env_8_spec_001" },
+    { "file": "assets/models/cars/sports-car.glb", "name": "Sports car", "length": 4.6, "yaw": 1.5708, "paint": "Material_4" },
+    { "file": "assets/models/cars/porsche-gt3r.glb", "name": "Porsche 992 GT3 R", "length": 4.6, "yaw": -1.5708, "paint": "EXT_Carpaint_Inst" }
+  ],
+  "grid": [
+    { "car": 0, "name": "Lambo · Racing Green", "skill": 1.0 },
+    { "car": 2, "name": "Porsche GT3 R · #91", "skill": 0.98 },
+    { "car": 1, "name": "Sports car · Midnight Blue", "skill": 0.97, "color": "#2848b8" },
+    { "car": 0, "name": "Lambo · Rosso", "skill": 0.95, "color": "#a00c18" },
+    { "car": 1, "name": "Sports car · Solar Yellow", "skill": 0.93, "color": "#f0b818" },
+    { "car": 0, "name": "Lambo · Bianco", "skill": 0.91, "color": "#d8dade" }
+  ]
+}

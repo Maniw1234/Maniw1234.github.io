@@ -452,28 +452,6 @@ export function buildZones(E) {
 
   C.zones.forEach((zn, zi) => B[zn.kind] && B[zn.kind](zn, zi));
 
-  /* ---------------- traffic ---------------- */
-  const cars = C.cars, CAR_PAL = [0xc8ccd4, 0x1a1c22, 0x8a1a22, 0x2a4a8a, 0x5a5e66, 0xe8e8ea, 0x2a5a3a];
-  const bodyM = new THREE.InstancedMesh(new THREE.BoxGeometry(4.4, 1.1, 1.9).translate(0, 0.75, 0), std({ color: 0xffffff, metalness: 0.6, roughness: 0.35 }), cars.length);
-  const cabM = new THREE.InstancedMesh(new THREE.BoxGeometry(2.3, 0.75, 1.7).translate(-0.2, 1.65, 0), std({ color: 0x0c0e14, metalness: 0.8, roughness: 0.15 }), cars.length);
-  const tailM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.06, 0.18, 1.7).translate(-2.22, 0.95, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.1, 0.15).multiplyScalar(2.5) }), cars.length);
-  const headM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.06, 0.16, 1.5).translate(2.22, 0.85, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.95, 0.85).multiplyScalar(2.2) }), cars.length);
-  cars.forEach((c, i) => bodyM.setColorAt(i, tcol.set(c.kind === "taxi" ? 0xf2c020 : c.kind === "truck" ? [0xb03a2e, 0x2e6ab0, 0xd8a020][i % 3] : CAR_PAL[Math.floor(c.col * CAR_PAL.length)])));
-  [bodyM, cabM, tailM, headM].forEach((m) => { m.frustumCulled = false; scene.add(m); });
-  live.push((t, dt, R) => {
-    cars.forEach((c, i) => {
-      const near = Math.abs(c.s - R.idx) < 700;
-      if (!near) { dummy.scale.setScalar(0); } else {
-        const p = at(C, c.s, c.lat); dummy.position.set(p[0], 0, p[1]); dummy.rotation.set(0, p[2], 0);
-        if (c.kind === "truck") dummy.scale.set(2.1, 2.3, 1.3); else dummy.scale.set(1, 1, 1);
-      }
-      dummy.updateMatrix(); bodyM.setMatrixAt(i, dummy.matrix); tailM.setMatrixAt(i, dummy.matrix); headM.setMatrixAt(i, dummy.matrix);
-      if (near && c.kind === "truck") { dummy.scale.set(1.1, 1.4, 1.2); dummy.position.x += Math.cos(dummy.rotation.y) * 5.5; dummy.position.z -= Math.sin(dummy.rotation.y) * 5.5; dummy.updateMatrix(); }
-      cabM.setMatrixAt(i, dummy.matrix);
-    });
-    [bodyM, cabM, tailM, headM].forEach((m) => { m.instanceMatrix.needsUpdate = true; });
-  });
-
   /* ---------------- speed traps ---------------- */
   const traps = C.events.filter((e) => e.type === "trap").map((e) => {
     const c = document.createElement("canvas"); c.width = 512; c.height = 160; const x = c.getContext("2d"), tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;

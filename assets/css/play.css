@@ -47,6 +47,10 @@ kbd { display: inline-grid; place-items: center; min-width: 28px; height: 26px; 
 .hud__best { font: 600 12px var(--mono); color: var(--muted); margin-top: 4px !important; }
 .hud__delta.is-ahead { color: #4fd18b; }
 .hud__delta.is-behind { color: #ff6a7a; }
+.hud__pos { margin-top: 6px !important; font: 900 30px/1 var(--font); letter-spacing: -.02em; }
+.hud__pos small { font: 700 13px var(--mono); color: var(--muted); margin-left: 4px; letter-spacing: .06em; }
+.hud__pos.is-up { color: #4fd18b; } .hud__pos.is-down { color: #ff6a7a; }
+.screen__race { margin-top: 8px; font-weight: 700; color: var(--ink); }
 .hud__score { font: 700 15px var(--mono); margin-top: 6px !important; letter-spacing: .04em; }
 .hud__combo { display: inline-block; min-width: 2.6em; color: #ffd040; transition: transform .15s; }
 .hud__combo.is-up { transform: scale(1.35); }
@@ -100,7 +104,8 @@ kbd { display: inline-grid; place-items: center; min-width: 28px; height: 26px; 
 .touch__brake { width: 70px; height: 76px; }
 .touch__gas { width: 92px; height: 76px; background: rgba(71, 150, 227, .35) !important; }
 .touch__gas.is-on { background: rgba(71, 150, 227, .65) !important; }
-.is-touch .hud__map { width: 112px; height: 112px; top: 64px; bottom: auto; }
+.is-touch .hud__map { width: 112px; height: 112px; top: 100px; bottom: auto; }
+.is-touch .hud__pos { font-size: 22px; }
 .is-touch .hud__speedo { bottom: 186px; width: 168px; }
 .is-touch .hud__speed { font-size: 40px; }
 .is-touch .hud__gear { font-size: 24px; }
