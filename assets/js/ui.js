@@ -75,9 +75,46 @@
     list.push(Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
     return list;
   }
+  /* ---------- ride-through: the words scatter as the bike rides off and fly back in when it lands ---------- */
+  function splitWords(el) {
+    Array.prototype.slice.call(el.childNodes).forEach(function (n) {
+      if (n.nodeType === 3) {
+        var frag = document.createDocumentFragment();
+        n.textContent.split(/(\s+)/).forEach(function (part) {
+          if (!part) return;
+          if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
+          var w = document.createElement("span"); w.className = "w"; w.textContent = part; frag.appendChild(w);
+        });
+        el.replaceChild(frag, n);
+      } else if (n.nodeType === 1) {
+        if (n.classList.contains("g-text")) n.classList.add("w"); // gradient text moves as one piece
+        else splitWords(n);
+      }
+    });
+  }
+  function prepFx(pin) {
+    pin.querySelectorAll("h1, h2").forEach(splitWords);
+    var all = Array.prototype.slice.call(pin.querySelectorAll(".w, p, li, .btn, .pcard, .rail-nav"));
+    var pieces = all.filter(function (el) { return !all.some(function (o) { return o !== el && o.contains(el); }); });
+    pieces.forEach(function (el, i) {
+      el.classList.add("fx");
+      el.style.setProperty("--i", String(Math.min(i, 24)));
+      el.style.setProperty("--dx", Math.round((Math.random() - 0.5) * 220) + "px");
+      el.style.setProperty("--dy", Math.round((Math.random() - 0.6) * 120) + "px");
+      el.style.setProperty("--r", Math.round((Math.random() - 0.5) * 50) + "deg");
+    });
+  }
+  var rideOff = 0;
+  function riding(on) {
+    clearTimeout(rideOff);
+    if (on) root.classList.add("riding");
+    else rideOff = setTimeout(function () { root.classList.remove("riding"); }, 420); // after the bike touches down
+  }
+
   function glide(target) {
     var from = window.scrollY, dist = target - from;
     if (Math.abs(dist) < 2) return;
+    riding(true);
     // one section per glide, slow enough to watch the whole stunt; sine easing keeps the middle from rushing
     var dur = Math.min(4600, 3400 + Math.max(0, Math.abs(dist) / window.innerHeight - 1.6) * 500), t0 = performance.now();
     step.busy = true;
@@ -85,7 +122,7 @@
       var k = Math.min(1, (now - t0) / dur), e = (1 - Math.cos(Math.PI * k)) / 2;
       window.scrollTo({ top: from + dist * e, behavior: "instant" });
       if (k < 1) requestAnimationFrame(tick);
-      else { step.busy = false; step.until = performance.now() + 450; }
+      else { step.busy = false; step.until = performance.now() + 450; riding(false); }
     })(t0);
   }
   function stepBy(dir) {
@@ -346,6 +383,7 @@
     getJSON("content/socials.json").then(renderSocials).catch(function () {})
   ]).then(function () {
     initRail();
+    if (!REDUCED) document.querySelectorAll(".sec .pin").forEach(prepFx);
     // deep link: #project-<name> opens that project
     var h = location.hash.slice(1);
     for (var i = 0; i < projects.length; i++) if (projects[i]._id === h) { document.getElementById("projects").scrollIntoView(); openProject(i); break; }

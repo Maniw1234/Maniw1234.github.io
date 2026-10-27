@@ -7,7 +7,8 @@ import { AfterimagePass } from "three/addons/postprocessing/AfterimagePass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { buildBike, BIKE_SCALE } from "./bike.js";
+import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { buildBike } from "./bike.js";
 
 const canvas = document.getElementById("scene");
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -276,9 +277,9 @@ const REST = [{ x: 0, yaw: -2.25 }, { x: 14, yaw: -0.5 }, { x: 48, yaw: 0.45 }, 
 const LAST = REST.length - 1;
 // camera and look-at for each parked spot, relative to the bike
 function restOffsets(i, cam, look) {
-  if (i === 0) { if (PORTRAIT) { cam.set(0, 1.6, 8.2); look.set(0, 0.2, 0); } else { cam.set(-1.3, 1.35, 6.8); look.set(-1.75, 0.75, 0); } return; }
+  if (PORTRAIT && i < LAST) { cam.set(0, 1.5, 7.6); look.set(0, 0.7, 0); return; } // phone: bike centred; the view shift parks it under the words
+  if (i === 0) { cam.set(-1.3, 1.35, 6.8); look.set(-1.75, 0.75, 0); return; }
   if (i === LAST) { cam.set(0, 1.6, 6.6); look.set(0, PORTRAIT ? 1.7 : 2.0, 0); return; }
-  if (PORTRAIT) { cam.set(0, 1.8, 8.6); look.set(0, i === 2 ? -0.2 : 1.9, 0); return; }
   cam.set(-1.2, 1.6, 7.2); look.set(i === 2 ? -1.2 : -2.0, i === 2 ? -0.3 : 0.7, 0);
 }
 const oc0 = new THREE.Vector3(), ol0 = new THREE.Vector3(), oc1 = new THREE.Vector3(), ol1 = new THREE.Vector3();
@@ -435,7 +436,7 @@ addEventListener("pointermove", (e) => { pointer.x = e.clientX / innerWidth * 2 
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let shake = 0, lastSeg = null, wasAir = false, wasRest = null, ignite = 0, idleW = 0, orbitA = 0, firstFrame = true, blip = 0, nextBlip = 1.5, flash = 0;
 const flashEl = document.getElementById("flash");
-let lastState = null, lastFrameMs = performance.now();
+let lastState = null, lastFrameMs = performance.now(), viewShift = 0, modelReady = false;
 
 function frame(t, dt, p) {
   ignite = clamp(ignite + dt * 1.6, 0, 1);
@@ -543,6 +544,11 @@ function frame(t, dt, p) {
   camera.position.copy(camPos).add(tmpV.set(Math.sin(t * 73) * shake, Math.sin(t * 91) * shake, 0));
   camera.position.x += pointer.x * 0.15; camera.position.y += pointer.y * 0.1;
   camera.lookAt(camLook);
+  // phones: shift the picture down so the parked bike sits below the words, not behind them
+  const shiftWant = PORTRAIT ? (S.rest && p < LAST - 0.5 ? 0.26 : 0.08) : 0;
+  viewShift += (shiftWant - viewShift) * (firstFrame ? 1 : 1 - Math.exp(-dt * 2.5));
+  if (viewShift > 0.001) camera.setViewOffset(innerWidth, innerHeight, 0, -viewShift * innerHeight, innerWidth, innerHeight);
+  else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   ground.material.uniforms.uCam.value.copy(camera.position);
 
   // post
@@ -558,21 +564,53 @@ function frame(t, dt, p) {
   return S;
 }
 
-/* ---------------- optional real model: set data-model="assets/models/bike.glb" on the canvas ---------------- */
+/* ---------------- real model: data-model="assets/models/bike.glb" on the canvas ----------------
+   data-model-yaw turns it to face +x; data-model-exhaust / -tail / -head are "x,y,z" anchors in bike units
+   (length ~2.05, ground at y = 0) so the flames, tail light and headlight sit on the model. */
 function loadBikeModel(url) {
-  new GLTFLoader().load(url, (gltf) => {
+  const d = canvas.dataset, vec = (v) => v && new THREE.Vector3(...v.split(",").map(Number));
+  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(url, (gltf) => {
     const m = gltf.scene;
-    // fit: longest horizontal side → 2.05 m * BIKE_SCALE, wheels on the ground, facing +x
+    m.rotation.y = Number(d.modelYaw || 0);
+    m.updateMatrixWorld();
+    // fit: longest horizontal side → 2.05 bike units, wheels on the ground, centred
     const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
-    if (size.z > size.x) m.rotation.y = -Math.PI / 2;
-    m.updateMatrixWorld(); box.setFromObject(m); box.getSize(size);
-    const k = (2.05 * BIKE_SCALE) / Math.max(size.x, size.z); m.scale.multiplyScalar(k);
+    m.scale.multiplyScalar(2.05 / Math.max(size.x, size.z));
     m.updateMatrixWorld(); box.setFromObject(m); const c = box.getCenter(new THREE.Vector3());
     m.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
-    const holder = new THREE.Group(); holder.add(m); holder.scale.setScalar(1 / BIKE_SCALE);
-    // keep lights, flames and the trail anchors; hide the coded bodywork
+    const holder = new THREE.Group(); holder.add(m); holder.updateMatrixWorld(true); // holder space = bike units
+
+    // wheels: round, upright parts low at the front and back; each axle gets a pivot so it can spin
+    const parts = [], bb = new THREE.Box3(), sz = new THREE.Vector3(), ce = new THREE.Vector3();
+    m.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true;
+      bb.setFromObject(o); bb.getSize(sz); bb.getCenter(ce);
+      if (sz.y > 0.15 && Math.abs(sz.x - sz.y) < 0.03 && Math.abs(ce.x) > 0.45 && ce.y < 0.45) parts.push({ o, c: ce.clone() });
+    });
+    const axles = [1, -1].map((side) => {
+      const mine = parts.filter((p) => Math.sign(p.c.x) === side);
+      if (!mine.length) return null;
+      const ref = mine.reduce((a, p) => (p.c.y > a.c.y ? p : a)).c; // the tyre's centre is the axle
+      const pivot = new THREE.Group(); pivot.position.set(ref.x, ref.y, 0); holder.add(pivot); pivot.updateMatrixWorld();
+      mine.filter((p) => Math.hypot(p.c.x - ref.x, p.c.y - ref.y) < 0.03).forEach((p) => pivot.attach(p.o));
+      return pivot;
+    });
+    if (axles[0] && axles[1]) B.wheels = axles;
+    modelReady = true;
+    // swap: hide the coded bodywork (lights, flames and anchors stay)
     B.bike.children.forEach((ch) => { if (ch.isGroup && ch !== flames) ch.visible = false; });
     body.add(holder);
+
+    // move the anchors onto the model
+    const anchor = (v) => { const o = new THREE.Object3D(); o.position.copy(v); body.add(o); return o; };
+    const ex = vec(d.modelExhaust), tail = vec(d.modelTail), head = vec(d.modelHead);
+    if (ex) flames.position.copy(ex);
+    if (tail) { B.tail = anchor(tail); tailGlow.position.copy(B.tail.position); }
+    if (head) {
+      const h = head;
+      ledGlow.position.copy(h); beam.position.copy(h); spot.position.copy(h); spot.target.position.set(h.x + 5, 0, 0);
+    }
   }, undefined, () => { /* no model file: keep the coded bike */ });
 }
 if (canvas.dataset.model) loadBikeModel(canvas.dataset.model);
@@ -592,4 +630,4 @@ if (REDUCED) {
     requestAnimationFrame(loop);
   })();
 }
-window.__ride = { frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev } };
+window.__ride = { frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev } };
