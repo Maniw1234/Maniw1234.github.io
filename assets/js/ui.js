@@ -65,7 +65,7 @@
      section while the bike plays one full stunt and lands. A gentle scroll or slow drag keeps the page
      still and revs the parked bike instead. Without 3D, or with reduced motion, the page scrolls normally. */
   var STOP_IDS = ["hero", "about", "projects", "skills"];
-  var step = { busy: false, until: 0, sum: 0, dir: true, last: 0, hold: false }, RIDE_AT = 140;
+  var step = { busy: false, until: 0, sum: 0, dir: true, last: 0, hold: false, floor: 0 }, RIDE_AT = 140;
   function rev(amount) { if (typeof window.__rideRev === "function") window.__rideRev(amount); }
   function stepping() { return root.classList.contains("has-gl") && !REDUCED && !(view && view.open); }
   function stops() {
@@ -104,12 +104,7 @@
       el.style.setProperty("--r", Math.round((Math.random() - 0.5) * 50) + "deg");
     });
   }
-  var rideOff = 0;
-  function riding(on) {
-    clearTimeout(rideOff);
-    if (on) root.classList.add("riding");
-    else rideOff = setTimeout(function () { root.classList.remove("riding"); }, 420); // after the bike touches down
-  }
+  function riding(on) { root.classList.toggle("riding", on); }
 
   function glide(target, quick) {
     var from = window.scrollY, dist = target - from;
@@ -120,11 +115,13 @@
     var dur = quick ? Math.min(1400, 800 + Math.abs(dist) / window.innerHeight * 120)
       : Math.min(4600, 3400 + Math.max(0, Math.abs(dist) / window.innerHeight - 1.6) * 500), t0 = performance.now();
     step.busy = true;
+    var landAt = quick ? 0.6 : 0.75; // the bike touches down about here: the words fly back in as it lands
     (function tick(now) {
       var k = Math.min(1, (now - t0) / dur), e = (1 - Math.cos(Math.PI * k)) / 2;
       window.scrollTo({ top: from + dist * e, behavior: "instant" });
+      if (k >= landAt) riding(false);
       if (k < 1) requestAnimationFrame(tick);
-      else { step.busy = false; step.until = performance.now() + 450; riding(false); root.classList.remove("quick-ride"); }
+      else { step.busy = false; step.until = performance.now() + 300; root.classList.remove("quick-ride"); }
     })(t0);
   }
   function stepBy(dir) {
@@ -144,8 +141,15 @@
     if (e.target.closest && e.target.closest(".rail") && Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
     e.preventDefault();
     var now = e.timeStamp || performance.now(), dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? window.innerHeight : 1);
-    // ignore the rest of the gesture that started a ride (trackpad momentum), until the wheel goes quiet
-    if (step.busy || now < step.until || (step.hold && now - step.last < 220)) { step.last = now; step.hold = true; step.sum = 0; return; }
+    // ignore the rest of the gesture that started a ride (trackpad momentum). Momentum only fades and keeps
+    // its direction, so a scroll that gets stronger again or turns around is a new gesture and counts at once
+    // (before, it stayed ignored until the trackpad was touched to stop the momentum).
+    var mag = Math.abs(dy), fresh = step.hold && dy !== 0 && ((dy > 0) !== step.dir || mag > step.floor * 2 + 6);
+    if (step.busy || now < step.until || (step.hold && !fresh && now - step.last < 220)) {
+      if (!step.hold || fresh) step.floor = mag; else step.floor = Math.min(step.floor, mag);
+      if (dy !== 0) step.dir = dy > 0;
+      step.last = now; step.hold = true; step.sum = 0; return;
+    }
     step.hold = false;
     // ride = keep scrolling the same way (two quick wheel clicks or a short trackpad swipe);
     // rev = a single nudge, slow creeping, or rocking back and forth (a change of direction starts over).
@@ -202,10 +206,13 @@
     if (!rail) return;
     var cards = Array.prototype.slice.call(rail.querySelectorAll(".pcard"));
     var stepW = function () { return cards[0] ? cards[0].getBoundingClientRect().width + 18 : 320; };
-    document.querySelectorAll(".rbtn").forEach(function (b) {
-      b.hidden = cards.length < 2;
+    var rbtns = document.querySelectorAll(".rbtn");
+    rbtns.forEach(function (b) {
       b.addEventListener("click", function () { rail.scrollBy({ left: stepW() * Number(b.dataset.dir), behavior: REDUCED ? "auto" : "smooth" }); });
     });
+    // arrows only when the cards don't all fit on screen
+    var arrows = function () { var hide = cards.length < 2 || rail.scrollWidth <= rail.clientWidth + 4; rbtns.forEach(function (b) { b.hidden = hide; }); };
+    arrows(); window.addEventListener("resize", arrows);
     var hint = document.getElementById("rail-hint");
     if (hint) hint.hidden = !rail.querySelector(".pcard__open");
     rail.addEventListener("keydown", function (e) {

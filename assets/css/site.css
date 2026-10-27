@@ -203,9 +203,9 @@ html:not(.js) .shot { position: static; width: 220px; }
 .footer__credit { font-size: 12px; opacity: .75; }
 .footer a { color: var(--muted); }
 
-/* ---------- ride-through: during a ride the words scatter, then fly back in once the bike lands ---------- */
+/* ---------- ride-through: during a ride the words scatter, then fly back in while the bike lands ---------- */
 .w, .hero h1 span.w { display: inline-block; }
-.fx { transition: transform .6s cubic-bezier(.2, .8, .2, 1), opacity .5s ease, filter .5s ease; transition-delay: calc(.12s + var(--i, 0) * 28ms); }
+.fx { transition: transform .5s cubic-bezier(.2, .8, .2, 1), opacity .4s ease, filter .4s ease; transition-delay: calc(var(--i, 0) * 16ms); }
 .panel, .projects__head, .rail { transition: opacity .35s ease, background-color .35s ease, border-color .35s ease; }
 html.riding .fx { opacity: 0; filter: blur(6px); transform: translate(var(--dx, 0), var(--dy, 0)) rotate(var(--r, 0)) scale(.85); transition-duration: .35s; transition-delay: calc(var(--i, 0) * 12ms); }
 html.riding .panel { opacity: 0; transition-delay: .2s; }
