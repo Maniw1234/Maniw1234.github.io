@@ -445,7 +445,7 @@ function frame(t, dt, p) {
 
   // Rev: rolls the parked bike back and forth with throttle, flames and smoke
   const nowMs = performance.now(), rdt = Math.min((nowMs - lastFrameMs) / 1000, 0.25); lastFrameMs = nowMs; // wall-clock, so rev settles on time on slow devices too
-  if (nowMs - lastRev > 160) revTarget *= Math.exp(-rdt * 5);
+  if (nowMs - lastRev > 250) revTarget *= Math.exp(-rdt * 5);
   rev += ((S.rest ? revTarget : 0) - rev) * (1 - Math.exp(-rdt * 9));
   if (Math.abs(rev) > 0.01) {
     const fw = tmpV.set(Math.cos(S.yaw), 0, -Math.sin(S.yaw)).multiplyScalar(rev * 1.8);
