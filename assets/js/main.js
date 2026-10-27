@@ -14,6 +14,7 @@ const canvas = document.getElementById("scene");
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let PORTRAIT = innerWidth / innerHeight < 0.8;
 const LITE = innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
+const perf = { level: 0, t: 0, n: 0, wait: 2 }; // speed governor, see governor() below
 
 let renderer;
 try {
@@ -263,7 +264,7 @@ composer.addPass(new OutputPass());
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false); composer.setSize(w, h);
-  if (LITE) bloom.resolution.set(w / 2, h / 2);
+  if (LITE || perf.level) bloom.resolution.set(w / (perf.level > 1 ? 4 : 2), h / (perf.level > 1 ? 4 : 2));
   camera.aspect = w / h; PORTRAIT = w / h < 0.8;
   camera.fov = w / h < 0.8 ? 55 : 42; // portrait phones need a wider view
   camera.updateProjectionMatrix();
@@ -610,7 +611,8 @@ const LOOKS = {
 function loadBikeModel(url) {
   const cfgUrl = url.replace(/\.glb$/i, ".json");
   fetch(cfgUrl).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((cfg) => {
-    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(url, (gltf) => fitModel(gltf.scene, cfg), undefined, () => { /* no model: keep the coded bike */ });
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(url, (gltf) => { fitModel(gltf.scene, cfg); ready(); },
+      (e) => { if (e.total) loading(0.12 + 0.8 * e.loaded / e.total); }, ready); // no model: keep the coded bike
   });
 }
 function fitModel(m, cfg) {
@@ -656,7 +658,29 @@ function fitModel(m, cfg) {
   if (tail) { B.tail = new THREE.Object3D(); B.tail.position.copy(tail); body.add(B.tail); tailGlow.position.copy(tail); }
   if (head) { ledGlow.position.copy(head); beam.position.copy(head); spot.position.copy(head); spot.target.position.set(head.x + 5, 0, 0); }
 }
-if (canvas.dataset.model) loadBikeModel(canvas.dataset.model);
+// loading screen (inline script in index.html): real download progress, then done once the bike is on screen
+function loading(k) { if (window.__load) window.__load.set(k); }
+function ready() { requestAnimationFrame(() => requestAnimationFrame(() => window.__load && window.__load.done())); }
+loading(0.1);
+if (canvas.dataset.model) loadBikeModel(canvas.dataset.model); else ready();
+
+/* ---------------- speed governor: older phones and laptops drop to lighter effects on their own ----------------
+   After the page has loaded, the average frame time is checked every 2 s. Too slow (under ~38 fps), and it steps
+   down: first fewer pixels and no motion trail, then fewer pixels again and a cheaper glow. It never steps back up. */
+function governor(raw) {
+  if (perf.level >= 2 || raw > 0.5) return; // a long gap is a background tab, not a slow device
+  if (!document.documentElement.classList.contains("is-loaded")) return; // loading is always slow; judge the ride
+  if (perf.wait > 0) { perf.wait -= raw; return; }
+  perf.t += raw; perf.n++;
+  if (perf.t < 2) return;
+  const ms = perf.t / perf.n * 1000; perf.t = perf.n = 0;
+  if (ms < 26) return;
+  perf.level++; perf.wait = 1.5;
+  afterimage.enabled = false;
+  renderer.setPixelRatio(perf.level === 1 ? Math.min(renderer.getPixelRatio(), 1) : 0.7);
+  bloom.resolution.set(innerWidth / (perf.level === 1 ? 2 : 4), innerHeight / (perf.level === 1 ? 2 : 4));
+  resize();
+}
 
 /* ---------------- drive ---------------- */
 document.documentElement.classList.add("has-gl");
@@ -670,8 +694,8 @@ if (REDUCED) {
     // progress follows real time (not the capped dt) so a slow device still lands on schedule
     const follow = document.documentElement.classList.contains("quick-ride") ? 10 : 5; // nav shortcuts play the stunts fast
     smoothP += (scrollP - smoothP) * (1 - Math.exp(-Math.min(raw, 0.25) * follow));
-    if (!document.hidden) frame(t, dt, smoothP);
+    if (!document.hidden) { frame(t, dt, smoothP); governor(raw); }
     requestAnimationFrame(loop);
   })();
 }
-window.__ride = { audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, rpm: Math.round(snd.rpm), load: +snd.load.toFixed(2), layers: Object.fromEntries(snd.layers.map((l, k) => [ENGINE[k][0], [+(l.want || 0).toFixed(3), +l.src.playbackRate.value.toFixed(2)]])) }), get green() { let n = 0; modelHolder && modelHolder.traverse((o) => { if (o.isMesh && o.material.color) { const h = {}; o.material.color.getHSL(h); if (h.s > 0.3 && h.l > 0.08) n++; } }); return modelHolder ? n : -1; }, frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev, yaw: lastState.yaw, back: !!back.on } };
+window.__ride = { audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, rpm: Math.round(snd.rpm), load: +snd.load.toFixed(2), layers: Object.fromEntries(snd.layers.map((l, k) => [ENGINE[k][0], [+(l.want || 0).toFixed(3), +l.src.playbackRate.value.toFixed(2)]])) }), get green() { let n = 0; modelHolder && modelHolder.traverse((o) => { if (o.isMesh && o.material.color) { const h = {}; o.material.color.getHSL(h); if (h.s > 0.3 && h.l > 0.08) n++; } }); return modelHolder ? n : -1; }, frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev, yaw: lastState.yaw, back: !!back.on }, perf: () => ({ level: perf.level, ratio: renderer.getPixelRatio() }) };

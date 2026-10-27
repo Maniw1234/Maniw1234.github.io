@@ -45,6 +45,28 @@ ul { padding: 0; list-style: none; }
 .has-gl .fallback { opacity: 0; transition: opacity .8s; }
 .flash { position: fixed; inset: 0; z-index: 1; pointer-events: none; background: #fff; opacity: 0; mix-blend-mode: screen; }
 
+/* ---------- loading screen ---------- */
+.loader { position: fixed; inset: 0; z-index: 200; display: grid; place-content: center; justify-items: center; gap: 18px; background: radial-gradient(60% 60% at 50% 45%, #0c0f1c, var(--bg) 70%); transition: opacity .8s ease, transform .8s ease, filter .8s ease; }
+html:not(.js) .loader, .loader[hidden] { display: none; }
+.is-loaded .loader { opacity: 0; transform: scale(1.15); filter: blur(8px); pointer-events: none; }
+.loader__dial { position: relative; width: min(220px, 56vw); aspect-ratio: 1; }
+.loader__dial svg { width: 100%; height: 100%; overflow: visible; }
+.loader__track, .loader__fill, .loader__red { fill: none; stroke-width: 10; stroke-linecap: round; }
+.loader__track { stroke: rgba(255, 255, 255, .08); }
+.loader__red { stroke: rgba(202, 102, 115, .55); stroke-linecap: butt; }
+.loader__fill { stroke: url(#loader-grad); stroke-dasharray: 377; stroke-dashoffset: 377; filter: drop-shadow(0 0 6px rgba(145, 119, 199, .6)); }
+.loader__ticks path { stroke: rgba(255, 255, 255, .35); stroke-width: 2.5; stroke-linecap: round; fill: none; }
+.loader__needle { transform-origin: 100px 100px; transform: rotate(-135deg); }
+.loader__needle path { stroke: #fff; stroke-width: 3.5; stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(255, 255, 255, .7)); }
+.loader__needle circle { fill: #0b0d16; stroke: #fff; stroke-width: 2.5; }
+.loader__n { position: absolute; left: 0; right: 0; bottom: 12%; text-align: center; font: 600 34px/1 "JetBrains Mono", monospace; color: var(--ink); }
+.loader__n small { display: block; margin-top: 6px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+.loader__label { font-size: 13px; letter-spacing: .28em; text-transform: uppercase; color: var(--muted); animation: loader-pulse 1.4s ease-in-out infinite; }
+@keyframes loader-pulse { 50% { opacity: .45; } }
+/* the page fades up behind it as the bike fires up */
+.js.is-loading .nav, .js.is-loading main { opacity: 0; }
+.js .nav, .js main { transition: opacity .9s ease .15s; }
+
 /* ---------- nav ---------- */
 .nav { position: fixed; top: 14px; left: 0; right: 0; z-index: 20; display: flex; justify-content: center; padding: 0 var(--pad); pointer-events: none; }
 .nav__bar { pointer-events: auto; display: flex; align-items: center; gap: 8px; width: min(1180px, 100%); padding: 8px 8px 8px 16px; border: 1px solid var(--line); border-radius: 999px; background: rgba(8, 10, 18, .55); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); }
@@ -163,6 +185,9 @@ html:not(.js) .sec, html:not(.js) .pin { min-height: 0; position: static; }
 .pview[open] { animation: pv-in .45s cubic-bezier(.2, .8, .2, 1); }
 @keyframes pv-in { from { opacity: 0; transform: translateY(30px) scale(.98); } }
 .pview__top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 16px var(--pad); background: linear-gradient(rgba(4, 5, 10, .95), rgba(4, 5, 10, 0)); }
+.pview__share { margin-left: auto; margin-right: 10px; height: 46px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.pview__share svg { width: 18px; }
+.pview__share.is-done { border-color: rgba(145, 119, 199, .7); }
 .pview__close { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--ink); cursor: pointer; display: grid; place-items: center; }
 .pview__close svg { width: 20px; }
 .pview__body { width: min(1100px, 100%); margin: 0 auto; padding: 0 var(--pad) 80px; }
