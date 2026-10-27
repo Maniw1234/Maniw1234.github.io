@@ -110,6 +110,7 @@
     var from = window.scrollY, dist = target - from;
     if (Math.abs(dist) < 2) return;
     riding(true); root.classList.toggle("quick-ride", !!quick);
+    window.__rideTo = target; // where this ride ends, so the bike knows when to turn back to its parked angle
     // scrolling: one section per glide, slow enough to watch the whole stunt (sine easing keeps the middle
     // from rushing). Nav links are shortcuts: the same stunts, played fast.
     var dur = quick ? Math.min(1400, 800 + Math.abs(dist) / window.innerHeight * 120)
