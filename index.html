@@ -68,6 +68,7 @@
 
     .container { width: 100%; max-width: 1280px; margin-inline: auto; padding-inline: clamp(16px, 5vw, 80px); }
     .emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; font-style: normal; line-height: 1; }
+    .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .skip-link { position: absolute; left: 12px; top: -80px; z-index: 10001; padding: 10px 16px; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 600; }
     .skip-link:focus { top: 12px; }
 
@@ -597,7 +598,7 @@
       <div class="hero__content">
         <h1 id="hero-title">
           <span class="hero__hi"><span>Hi,</span><span class="wave emoji" role="img" aria-label="waving hand">👋</span><span>I'm</span></span>
-          <span class="hero__name" aria-label="Mani"><span style="--i:0" aria-hidden="true">M</span><span style="--i:1" aria-hidden="true">a</span><span style="--i:2" aria-hidden="true">n</span><span style="--i:3" aria-hidden="true">i</span></span>
+          <span class="visually-hidden">Mani</span><span class="hero__name" aria-hidden="true"><span style="--i:0">M</span><span style="--i:1">a</span><span style="--i:2">n</span><span style="--i:3">i</span></span>
         </h1>
         <div class="pills">
           <span class="pill shine" style="--i:0"><span class="emoji" aria-hidden="true">🛠️</span>Web Developer</span>
@@ -680,7 +681,7 @@
               <svg class="project__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/></svg>
             </div>
             <p>A cross-device AI computer-use assistant concept: a Windows desktop app and a mobile companion, fronted by an animated blue dome character with a star crown and tracking eyes.</p>
-            <ul class="tags" aria-label="Tags"><li class="chip shine">Windows desktop</li><li class="chip shine">Mobile companion</li><li class="chip shine">Voice commands</li><li class="chip shine">AI</li></ul>
+            <ul class="tags"><li class="chip shine">Windows desktop</li><li class="chip shine">Mobile companion</li><li class="chip shine">Voice commands</li><li class="chip shine">AI</li></ul>
             <div class="project__actions">
               <details class="details">
                 <summary class="btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><span>View details</span></summary>
@@ -701,7 +702,7 @@
               <svg class="project__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><path d="M8 2v16M16 6v16"/></svg>
             </div>
             <p>An interactive live map that combines MapLibre map rendering with a Three.js 3D ambulance and animated crew elements, built for real-time visualization.</p>
-            <ul class="tags" aria-label="Tags"><li class="chip shine">MapLibre</li><li class="chip shine">Three.js</li><li class="chip shine">3D assets</li><li class="chip shine">Real-time</li></ul>
+            <ul class="tags"><li class="chip shine">MapLibre</li><li class="chip shine">Three.js</li><li class="chip shine">3D assets</li><li class="chip shine">Real-time</li></ul>
             <div class="project__actions">
               <details class="details">
                 <summary class="btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><span>View details</span></summary>
@@ -722,7 +723,7 @@
               <svg class="project__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
             </div>
             <p>A shipping-tracking application built with Base44, focused on clear tracking information, smooth page navigation, and keeping state intact as you move around.</p>
-            <ul class="tags" aria-label="Tags"><li class="chip shine">Base44</li><li class="chip shine">Frontend</li><li class="chip shine">Navigation</li><li class="chip shine">State</li></ul>
+            <ul class="tags"><li class="chip shine">Base44</li><li class="chip shine">Frontend</li><li class="chip shine">Navigation</li><li class="chip shine">State</li></ul>
             <div class="project__actions">
               <details class="details">
                 <summary class="btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><span>View details</span></summary>
@@ -742,7 +743,7 @@
               <svg class="project__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 10v4M6 6v12M10 3v18M14 8v8M18 5v14M22 10v4"/></svg>
             </div>
             <p>Automation for a personal audio archive: transcription, file organization, and backend workflows, including Hatzolah Archive Uploader, which files recordings into the owner's own Google Drive.</p>
-            <ul class="tags" aria-label="Tags"><li class="chip shine">Transcription</li><li class="chip shine">Automation</li><li class="chip shine">Google Drive API</li></ul>
+            <ul class="tags"><li class="chip shine">Transcription</li><li class="chip shine">Automation</li><li class="chip shine">Google Drive API</li></ul>
             <div class="project__actions">
               <details class="details">
                 <summary class="btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg><span>View details</span></summary>
