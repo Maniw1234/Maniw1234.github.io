@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Ride mode | Mani</title>
-  <meta name="description" content="Ride Mani's blacked-out superbike yourself through six zones: jumps, boost pads, sparkles to collect and a ghost of your best run.">
+  <meta name="description" content="Ride Mani's blacked-out superbike yourself through ten zones: jumps with flips and spins, traffic, a dirt bike in the desert, sparkles to collect and a ghost of your best run.">
   <meta name="theme-color" content="#05060b">
   <meta name="color-scheme" content="dark">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mani">
   <meta property="og:title" content="Ride mode | Mani">
-  <meta property="og:description" content="Ride the blacked-out superbike yourself through six zones.">
+  <meta property="og:description" content="Ride the blacked-out superbike yourself through ten zones.">
   <meta property="og:url" content="https://maniw1234.github.io/play.html">
   <meta property="og:image" content="https://maniw1234.github.io/assets/img/og.jpg">
   <meta name="twitter:card" content="summary_large_image">
@@ -86,6 +86,7 @@
     <div class="hud__tc">
       <p class="hud__time" id="h-time">0:00.0</p>
       <p class="hud__best"><span id="h-best">Best –</span> <span class="hud__delta" id="h-delta"></span></p>
+      <p class="hud__score"><span id="h-score">0</span> <span class="hud__combo" id="h-combo"></span></p>
     </div>
     <div class="hud__tr">
       <p class="hud__orbs" title="Sparkles collected"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 2c1.6 15.2 14.8 28.4 30 30-15.2 1.6-28.4 14.8-30 30C30.4 46.8 17.2 33.6 2 32 17.2 30.4 30.4 17.2 32 2z" fill="currentColor"/></svg><span id="h-orbs">0</span><small>/<span id="h-orbs-n">0</span></small></p>
@@ -93,14 +94,16 @@
     </div>
     <canvas class="hud__map" id="h-map" aria-hidden="true"></canvas>
     <div class="hud__speedo">
-      <p class="hud__speed"><span id="h-speed">0</span><small>km/h</small></p>
+      <p class="hud__speed"><span id="h-speed">0</span><small>mph</small></p>
       <p class="hud__gear"><small>Gear</small><span id="h-gear">N</span></p>
       <div class="hud__bar hud__rpm"><i id="h-rpm"></i></div>
       <div class="hud__bar hud__nitro"><i id="h-nitro"></i><span>Nitro</span></div>
     </div>
     <p class="hud__warn" id="h-warn" role="status"></p>
     <p class="hud__msg" id="h-msg" role="status"></p>
+    <p class="hud__trick" id="h-trick" aria-live="polite"><b id="h-trick-name"></b><small id="h-trick-pts"></small></p>
     <p class="hud__big" id="h-big" aria-live="assertive"></p>
+    <div class="hud__flash" id="h-flash"></div>
   </div>
 
   <!-- phone controls -->
@@ -121,7 +124,7 @@
     <div class="screen__card">
       <p class="kicker">// ride mode</p>
       <h1 id="st-title">Take it for a <span class="g-text">ride.</span></h1>
-      <p class="screen__lead">Ride the bike yourself through six zones. Beat your best time, collect sparkles and race the ghost of your best run.</p>
+      <p class="screen__lead">Ride through ten zones, from Midtown to the stadium. Throw flips and spins off the jumps, weave through traffic, beat your best time and race the ghost of your best run. In the Red Desert you swap to a dirt bike.</p>
       <p class="screen__meta" id="st-length"></p>
       <ul class="keys keys--desk">
         <li><kbd>W</kbd><kbd>↑</kbd> Gas</li>
@@ -132,8 +135,9 @@
         <li><kbd>C</kbd> Camera</li>
         <li><kbd>Esc</kbd> Pause</li>
         <li><kbd>M</kbd> Sound</li>
+        <li class="keys__wide">In the air: <kbd>W</kbd><kbd>S</kbd> flip, <kbd>A</kbd><kbd>D</kbd> spin. Land straight to score.</li>
       </ul>
-      <p class="keys keys--touch">Left thumb steers. Right thumb works the gas, brake and nitro.</p>
+      <p class="keys keys--touch">Left thumb steers. Right thumb works the gas, brake and nitro. In the air, gas and brake flip the bike and the arrows spin it. Land straight to score.</p>
       <div class="screen__cta">
         <button class="btn btn--primary" id="st-go" type="button">Start riding</button>
         <a class="btn btn--ghost" href="./">Back to the site</a>
@@ -142,7 +146,7 @@
         <p id="st-best">No best time yet</p>
         <button class="sound" type="button" data-sound aria-pressed="true"><i aria-hidden="true"></i><span>Sound on</span></button>
       </div>
-      <p class="screen__credit">3D motorcycle: <a href="https://sketchfab.com/3d-models/kawashaki-ninja-h2-73eebe213a3043d1a1eb277c8ce05b5f" rel="noopener">&ldquo;Kawashaki ninja h2&rdquo;</a> by <a href="https://sketchfab.com/huy14320000006" rel="noopener">Jonrss</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web).</p>
+      <p class="screen__credit">3D motorcycle: <a href="https://sketchfab.com/3d-models/kawashaki-ninja-h2-73eebe213a3043d1a1eb277c8ce05b5f" rel="noopener">&ldquo;Kawashaki ninja h2&rdquo;</a> by <a href="https://sketchfab.com/huy14320000006" rel="noopener">Jonrss</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web). Dirt bike: <a href="https://sketchfab.com/3d-models/honda-450r-dirt-bike-eb01f118459e4074b55034ec5907c4de" rel="noopener">&ldquo;Honda 450R Dirt bike&rdquo;</a> by <a href="https://sketchfab.com/J6vxplayz" rel="noopener">J6HDCreations</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web).</p>
     </div>
   </section>
 
@@ -169,6 +173,9 @@
         <div><dt>Sparkles</dt><dd id="d-orbs"></dd></div>
         <div><dt>Top speed</dt><dd id="d-top"></dd></div>
         <div><dt>Air time</dt><dd id="d-air"></dd></div>
+        <div><dt>Score</dt><dd id="d-score"></dd></div>
+        <div><dt>Best trick</dt><dd id="d-trick"></dd></div>
+        <div><dt>Near misses</dt><dd id="d-near"></dd></div>
       </dl>
       <div class="screen__cta">
         <button class="btn btn--primary" id="d-again" type="button">Ride again</button>

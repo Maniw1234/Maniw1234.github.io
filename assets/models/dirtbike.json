@@ -1,0 +1,12 @@
+{
+  "about": "Settings for dirtbike.glb, read by game.js for the desert zone. Positions are in bike units: about 2.05 long, front at +x, ground at y = 0.",
+  "yaw": 0,
+  "flat": true,
+  "wheels": ["wheel_front", "wheel_rear"],
+  "exhaust": [-0.67, 0.77, 0.1],
+  "tail": [-0.92, 0.9, 0],
+  "head": [0.5, 1.0, 0],
+  "materials": {
+    "color_2828838": "rubber"
+  }
+}
