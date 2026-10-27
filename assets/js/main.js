@@ -360,40 +360,45 @@ function ride(p, t) {
   return S;
 }
 
-/* ---------------- sound: Mani's recordings in assets/audio, layered and pitched by the ride ----------------
-   Loops (idle, ride, high revs, tyre squeal) play all the time and crossfade with the bike's speed, revs and
-   smoke; start, blip and flyby are one-shots. Each loop file has 0.15 s of padding either side so it wraps
-   cleanly whatever start delay the browser's decoder adds. Nothing downloads until sound is turned on. */
-const AUDIO = "assets/audio/", LOOPS = { idle: 7.8, ride: 12, high: 6.6, tyre: 9.4 };
-const snd = { ctx: null, on: false, buf: {}, layer: {}, t0: 0 };
+/* ---------------- sound: one bike, one recording ----------------
+   Everything comes from a single take of a ZX-6R (Mani's "Kawasaki Ninja Burnout" upload), cut into short
+   loops at four engine speeds. Like a racing game, the revs pick the two nearest loops, blend them and
+   re-pitch them to match, so the same engine idles, blips and climbs. The revs rise fast and fall back slower,
+   the way a real throttle does, and the tone opens up under load. Each loop file has 0.15 s of its own wrap as
+   padding either side, so it loops cleanly whatever start delay the decoder adds. Nothing downloads until
+   sound is turned on. */
+const AUDIO = "assets/audio/engine-";
+const ENGINE = [["idle", 1230, 0.75], ["mid", 5340, 0.95], ["high", 8900, 0.65], ["top", 12300, 0.9]]; // loop, rpm it was recorded at (inline four: 30 x firing Hz), loop length
+const snd = { ctx: null, on: false, layers: [], rpm: 1230, load: 0, last: 0 };
 function initAudio() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)(); snd.ctx = ctx;
-  const master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination); snd.master = master;
-  const load = (n) => fetch(AUDIO + n + ".mp3").then((r) => r.arrayBuffer())
-    .then((a) => new Promise((ok, no) => ctx.decodeAudioData(a, ok, no))).then((b) => { snd.buf[n] = b; });
-  snd.ready = Promise.all(["start", "blip", "flyby", ...Object.keys(LOOPS)].map(load)).then(() => {
-    Object.keys(LOOPS).forEach((n) => {
+  const master = ctx.createGain(); master.gain.value = 0; snd.master = master;
+  const tone = ctx.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 2000; tone.Q.value = 0.5; snd.tone = tone;
+  tone.connect(master).connect(ctx.destination);
+  snd.ready = Promise.all(ENGINE.map(([n, , len]) => fetch(AUDIO + n + ".mp3").then((r) => r.arrayBuffer())
+    .then((a) => new Promise((ok, no) => ctx.decodeAudioData(a, ok, no))).then((buf) => {
       const src = ctx.createBufferSource(), g = ctx.createGain();
-      src.buffer = snd.buf[n]; src.loop = true; src.loopStart = 0.15; src.loopEnd = 0.15 + LOOPS[n];
-      g.gain.value = 0; src.connect(g).connect(master); src.start(0, 0.15 + Math.random() * LOOPS[n]);
-      snd.layer[n] = { src, g };
-    });
-  }).catch(() => {});
-}
-function play(name, gain, offset = 0) {
-  if (!snd.on || !snd.buf[name]) return;
-  const src = snd.ctx.createBufferSource(), g = snd.ctx.createGain();
-  src.buffer = snd.buf[name]; g.gain.value = gain; src.connect(g).connect(snd.master); src.start(snd.ctx.currentTime, offset);
+      src.buffer = buf; src.loop = true; src.loopStart = 0.15; src.loopEnd = 0.15 + len;
+      g.gain.value = 0; src.connect(g).connect(tone); src.start(0, 0.15);
+      return { src, g };
+    }))).then((l) => { snd.layers = l; }).catch(() => {});
 }
 function audioTick(S) {
-  const L = snd.layer; if (!snd.on || !L.idle) return;
-  const now = snd.ctx.currentTime, r = clamp((S.rpm - 1250) / 10500, 0, 1), sp = clamp(S.speed, 0, 1), th = clamp(S.throttle, 0, 1);
-  const warm = clamp((now - snd.t0 - 0.9) / 1, 0, 1); // the start clip plays first, then the engine settles into idle
-  const set = (n, gain, rate) => { L[n].g.gain.setTargetAtTime(gain * warm, now, 0.1); L[n].src.playbackRate.setTargetAtTime(rate, now, 0.08); };
-  set("idle", 0.8 * (1 - smooth(0.1, 0.5, Math.max(sp, th))), 1 + r * 0.3);
-  set("ride", 0.75 * smooth(0.05, 0.45, sp) * (1 - 0.45 * th), 0.8 + r * 0.45);
-  set("high", 0.85 * smooth(0.04, 0.6, Math.max(th, r)), 0.72 + r * 0.45); // revving in place reaches here too
-  set("tyre", 0.5 * S.smoke, 0.9 + sp * 0.2);
+  if (!snd.on || !snd.layers.length) return;
+  const now = snd.ctx.currentTime, dt = clamp(now - snd.last, 0, 0.5); snd.last = now;
+  const want = clamp(S.rpm, 1100, 12800);
+  snd.rpm += (want - snd.rpm) * (1 - Math.exp(-dt * (want > snd.rpm ? 9 : 3.2))); // up in ~0.2 s, down in ~0.8 s
+  snd.load += (clamp(S.throttle, 0, 1) - snd.load) * (1 - Math.exp(-dt * 8));
+  // the two loops either side of the revs, blended evenly on a log scale; each re-pitched to the revs
+  let i = 0; while (i < ENGINE.length - 2 && snd.rpm > ENGINE[i + 1][1]) i++;
+  const x = clamp(Math.log(snd.rpm / ENGINE[i][1]) / Math.log(ENGINE[i + 1][1] / ENGINE[i][1]), 0, 1);
+  snd.layers.forEach((l, k) => {
+    const g = k === i ? Math.cos(x * Math.PI / 2) : k === i + 1 ? Math.sin(x * Math.PI / 2) : 0;
+    l.want = g; l.g.gain.setTargetAtTime(g, now, 0.03);
+    l.src.playbackRate.setTargetAtTime(clamp(snd.rpm / ENGINE[k][1], 0.5, 2.5), now, 0.03);
+  });
+  snd.tone.frequency.setTargetAtTime(1200 + 5500 * snd.load + snd.rpm * 0.3, now, 0.05);
+  snd.master.gain.setTargetAtTime(0.9 * (0.55 + 0.45 * snd.load), now, 0.08);
 }
 const soundBtn = document.getElementById("sound");
 if (soundBtn) {
@@ -401,8 +406,7 @@ if (soundBtn) {
   soundBtn.addEventListener("click", () => {
     if (!snd.ctx) initAudio();
     snd.on = !snd.on; snd.ctx.resume();
-    snd.master.gain.setTargetAtTime(snd.on ? 0.9 : 0, snd.ctx.currentTime, 0.1);
-    if (snd.on) snd.ready.then(() => { if (!snd.on) return; snd.t0 = snd.ctx.currentTime; play("start", 1); });
+    if (!snd.on) snd.master.gain.setTargetAtTime(0, snd.ctx.currentTime, 0.1);
     soundBtn.setAttribute("aria-pressed", String(snd.on));
     soundBtn.querySelector("span").textContent = snd.on ? "Sound on" : "Sound off";
   });
@@ -467,15 +471,13 @@ function frame(t, dt, p) {
   orbitA += dt * 0.32 * idleW;
   if (idle && S.speed < 0.5) {
     nextBlip -= dt;
-    if (nextBlip < 0) { blip = 0.6; nextBlip = 5 + rnd() * 4; play("blip", 0.45); }
+    if (nextBlip < 0) { blip = 0.6; nextBlip = 5 + rnd() * 4; }
   }
   blip *= Math.exp(-dt * 3.5);
   S.rpm += blip * 6000 * idleW; S.throttle = Math.max(S.throttle, blip * idleW);
 
   // events
   if (wasAir && !S.air) { shake = 0.35; spawnSparks(tmpV.copy(S.pos).setY(0.05), 140, new THREE.Vector3(-1, 0.6, 0), 1.6, 9); spawnSmoke(S.pos, 10); flash = 0.18; }
-  // pulling away: the flyby's loudest moment (3.5 s into the clip) lands mid-ride
-  if (wasRest === true && !S.rest) play("flyby", 0.7, document.documentElement.classList.contains("quick-ride") ? 3 : 1.9);
   wasAir = S.air; wasRest = S.rest; lastSeg = S.seg;
 
   // bike transform
@@ -651,4 +653,4 @@ if (REDUCED) {
     requestAnimationFrame(loop);
   })();
 }
-window.__ride = { audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, bufs: Object.keys(snd.buf).length, layers: Object.fromEntries(Object.entries(snd.layer).map(([n, l]) => [n, +l.g.gain.value.toFixed(3)])) }), get green() { let n = 0; modelHolder && modelHolder.traverse((o) => { if (o.isMesh && o.material.color) { const h = {}; o.material.color.getHSL(h); if (h.s > 0.3 && h.l > 0.08) n++; } }); return modelHolder ? n : -1; }, frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev } };
+window.__ride = { audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, rpm: Math.round(snd.rpm), load: +snd.load.toFixed(2), layers: Object.fromEntries(snd.layers.map((l, k) => [ENGINE[k][0], [+(l.want || 0).toFixed(3), +l.src.playbackRate.value.toFixed(2)]])) }), get green() { let n = 0; modelHolder && modelHolder.traverse((o) => { if (o.isMesh && o.material.color) { const h = {}; o.material.color.getHSL(h); if (h.s > 0.3 && h.l > 0.08) n++; } }); return modelHolder ? n : -1; }, frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev } };
