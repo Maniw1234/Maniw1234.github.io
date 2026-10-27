@@ -65,7 +65,7 @@
      section while the bike plays one full stunt and lands. A gentle scroll or slow drag keeps the page
      still and revs the parked bike instead. Without 3D, or with reduced motion, the page scrolls normally. */
   var STOP_IDS = ["hero", "about", "projects", "skills"];
-  var step = { busy: false, until: 0, hist: [] };
+  var step = { busy: false, until: 0, sum: 0, dir: true, last: 0, hold: false }, RIDE_AT = 140;
   function rev(amount) { if (typeof window.__rideRev === "function") window.__rideRev(amount); }
   function stepping() { return root.classList.contains("has-gl") && !REDUCED && !(view && view.open); }
   function stops() {
@@ -78,10 +78,11 @@
   function glide(target) {
     var from = window.scrollY, dist = target - from;
     if (Math.abs(dist) < 2) return;
-    var dur = Math.min(2600, 900 + Math.abs(dist) / window.innerHeight * 650), t0 = performance.now();
+    // one section per glide, slow enough to watch the whole stunt; sine easing keeps the middle from rushing
+    var dur = Math.min(4600, 3400 + Math.max(0, Math.abs(dist) / window.innerHeight - 1.6) * 500), t0 = performance.now();
     step.busy = true;
     (function tick(now) {
-      var k = Math.min(1, (now - t0) / dur), e = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      var k = Math.min(1, (now - t0) / dur), e = (1 - Math.cos(Math.PI * k)) / 2;
       window.scrollTo({ top: from + dist * e, behavior: "instant" });
       if (k < 1) requestAnimationFrame(tick);
       else { step.busy = false; step.until = performance.now() + 450; }
@@ -103,14 +104,19 @@
     if (!stepping() || e.ctrlKey) return;
     if (e.target.closest && e.target.closest(".rail") && Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
     e.preventDefault();
-    var now = performance.now(), dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? window.innerHeight : 1);
-    if (step.busy || now < step.until) return;
-    // hard = a big single jump, or a lot of scrolling in one direction within a quarter second
-    step.hist = step.hist.filter(function (h) { return now - h.t < 250 && (h.d > 0) === (dy > 0); });
-    step.hist.push({ t: now, d: dy });
-    var sum = step.hist.reduce(function (a, h) { return a + h.d; }, 0);
-    if (Math.abs(dy) >= 220 || Math.abs(sum) >= 280) { step.hist = []; rev(0); stepBy(dy > 0 ? 1 : -1); }
-    else rev(dy / 260);
+    var now = e.timeStamp || performance.now(), dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? window.innerHeight : 1);
+    // ignore the rest of the gesture that started a ride (trackpad momentum), until the wheel goes quiet
+    if (step.busy || now < step.until || (step.hold && now - step.last < 220)) { step.last = now; step.hold = true; step.sum = 0; return; }
+    step.hold = false;
+    // ride = keep scrolling the same way (two quick wheel clicks or a short trackpad swipe);
+    // rev = a single nudge, slow creeping, or rocking back and forth (a change of direction starts over).
+    // The tally leaks away over time, so only a deliberate scroll fills it.
+    if (dy === 0) return;
+    if (step.dir !== (dy > 0)) { step.sum = 0; step.dir = dy > 0; }
+    step.sum = Math.max(0, step.sum - (now - step.last) * 0.25);
+    step.last = now; step.sum += Math.min(Math.abs(dy), 160);
+    if (step.sum >= RIDE_AT) { step.sum = 0; rev(0); stepBy(dy > 0 ? 1 : -1); }
+    else rev(dy / 180);
   }, { passive: false });
   var touch = null;
   window.addEventListener("touchstart", function (e) {
@@ -132,7 +138,7 @@
   window.addEventListener("touchend", function () {
     if (!touch || !stepping() || touch.side) { touch = null; return; }
     var a = touch.pts[0], b = touch.pts[touch.pts.length - 1], v = (b.y - a.y) / Math.max(1, b.t - a.t), total = touch.ly - touch.y;
-    if (Math.abs(total) > 60 && Math.abs(v) > 0.45) { rev(0); stepBy(total < 0 ? 1 : -1); } // a flick rides to the next section
+    if (Math.abs(total) > 40 && Math.abs(v) > 0.3) { rev(0); stepBy(total < 0 ? 1 : -1); } // a flick rides to the next section
     touch = null;
   });
   document.addEventListener("keydown", function (e) {
