@@ -1,11 +1,11 @@
 // Ride mode scenery: each of the ten zones builds its own world here, plus the moving parts (traffic, the desert
 // train, the avalanche, the helicopter, fireworks, snow). game.js owns the camera, the bike and the HUD.
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { at, HALF } from "./course.js";
 
 const dummy = new THREE.Object3D(), tcol = new THREE.Color();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // one InstancedMesh for a list of things; place(o, dummy, colour) sets each one up
 export function instanced(scene, geo, mat, list, place, colored = false) {
@@ -61,6 +61,12 @@ export function buildZones(E) {
         vec3 c = vec3(0.022, 0.024, 0.04) + vec3(0.03) * max(0., vN.y);
         if (abs(vN.y) < 0.5) c += mix(vec3(1.0, 0.82, 0.55), vec3(0.75, 0.85, 1.0), h21(cell * 0.7)) * lit * (0.28 + 0.34 * h21(cell * 3.1));
         c += vC * step(0.988, fract(vL.y / 22.)) * 1.2; // trim lines
+        // street level: lit shopfronts with a dark band above them
+        if (abs(vN.y) < 0.5 && vL.y < 4.2) {
+          float bay = floor(f.x / 7.), u = fract(f.x / 7.), lit2 = step(0.35, h21(vec2(bay, vC.r * 9.)));
+          float shop = step(0.1, u) * step(u, 0.9) * step(0.4, vL.y) * step(vL.y, 3.2) * (1. - 0.8 * step(0.94, fract(f.x / 1.4)));
+          c = mix(vec3(0.014, 0.015, 0.02), mix(vec3(1., 0.8, 0.55), vC, 0.3 + 0.4 * h21(vec2(bay, 4.))) * (0.08 + 0.16 * h21(vec2(bay, 7.))) * lit2 + vec3(0.01), shop);
+        }
         gl_FragColor = vec4(fogged(c, vW), 1.);
       }`
   });
@@ -75,14 +81,45 @@ export function buildZones(E) {
     add(box, towerMat, list, towerPlace, true);
   };
 
+  // a freight train: a locomotive, then box cars and tank cars, each one mesh per material, nose along +x
+  function trainCars() {
+    const M = { paint: std({ color: 0xd8a020, metalness: 0.4, roughness: 0.5 }), dark: std({ color: 0x1c1e22, metalness: 0.7, roughness: 0.5 }), glass: std({ color: 0x0a1018, metalness: 0.9, roughness: 0.1 }), stripe: std({ color: 0xe8e8e8, roughness: 0.5 }) };
+    const P = (g, x, y, z) => g.translate(x, y, z);
+    const under = () => {
+      const g = [P(new THREE.BoxGeometry(19.6, 0.5, 2.9), 0, 1.35, 0)];
+      [-6.6, 6.6].forEach((x) => { g.push(P(new THREE.BoxGeometry(3.8, 0.7, 2.5), x, 0.85, 0)); [-0.9, 0.9].forEach((dx) => [-1.15, 1.15].forEach((z) => g.push(P(new THREE.CylinderGeometry(0.5, 0.5, 0.18, 14).rotateX(Math.PI / 2), x + dx, 0.5, z)))); });
+      g.push(P(new THREE.BoxGeometry(0.4, 0.35, 0.5), 10, 1.2, 0), P(new THREE.BoxGeometry(0.4, 0.35, 0.5), -10, 1.2, 0)); return g;
+    };
+    const mesh = (parts) => { const keys = Object.keys(parts).filter((k) => parts[k].length), g = mergeGeometries(keys.map((k) => mergeGeometries(parts[k])), true); const m = new THREE.Mesh(g, keys.map((k) => parts[k].mat || M[k])); m.frustumCulled = false; m.visible = false; return m; };
+    const loco = { paint: [P(new THREE.BoxGeometry(13, 2.6, 2.7), -2.6, 2.9, 0), P(new THREE.BoxGeometry(4.6, 3.4, 3), 6.4, 3.3, 0), P(new THREE.CylinderGeometry(1.5, 1.5, 4.6, 16, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).scale(1, 0.35, 1), 6.4, 5, 0)],
+      dark: [...under(), P(new THREE.BoxGeometry(1.4, 0.6, 1.2), -6, 4.5, 0), P(new THREE.CylinderGeometry(0.25, 0.3, 0.8, 10), -3, 4.5, 0)],
+      glass: [P(new THREE.BoxGeometry(0.1, 1.1, 2.6), 8.72, 3.9, 0), P(new THREE.BoxGeometry(2.6, 1, 3.04), 6.6, 3.9, 0)],
+      stripe: [P(new THREE.BoxGeometry(18, 0.28, 3.06), 0.4, 1.9, 0)] };
+    const ribs = (L) => Array.from({ length: Math.round(L / 2) }, (_, i) => P(new THREE.BoxGeometry(0.12, 3.5, 3.1), -L / 2 + 1 + i * 2, 3.35, 0));
+    const box = (c) => { const mat = std({ color: c, metalness: 0.35, roughness: 0.65 }); return { paint: Object.assign([P(new THREE.BoxGeometry(19, 3.4, 2.95), 0, 3.35, 0), ...ribs(19), P(new THREE.BoxGeometry(19.2, 0.2, 3.1), 0, 5.1, 0)], { mat }), dark: [...under(), P(new THREE.BoxGeometry(3.6, 3, 3.02), 0, 3.2, 0)] }; };
+    const tank = (c) => { const mat = std({ color: c, metalness: 0.6, roughness: 0.35 }); return { paint: Object.assign([P(new THREE.CylinderGeometry(1.45, 1.45, 17, 20).rotateZ(Math.PI / 2), 0, 3.15, 0), P(new THREE.SphereGeometry(1.45, 16, 10).scale(0.5, 1, 1), 8.5, 3.15, 0), P(new THREE.SphereGeometry(1.45, 16, 10).scale(0.5, 1, 1), -8.5, 3.15, 0), P(new THREE.CylinderGeometry(0.6, 0.6, 0.5, 12), 0, 4.7, 0)], { mat }), dark: under(), stripe: [P(new THREE.BoxGeometry(17.2, 0.22, 2.96), 0, 3.2, 0)] }; };
+    return [mesh(loco), mesh(box(0x7a3424)), mesh(tank(0x2a2e36)), mesh(box(0x2e4a6a)), mesh(tank(0xc8ccd2)), mesh(box(0x5a5a52)), mesh(box(0x8a4a22))];
+  }
+
   // pole lamps along the road
   const lamps = (zn, every, color, latOff = HALF + 1.2, hgt = 6) => {
     const list = [];
     for (let s = zn.s; s < zn.e; s += step(every)) for (const sd of [-1, 1]) list.push({ s, lat: sd * latOff });
-    add(new THREE.CylinderGeometry(0.07, 0.1, hgt, 6).translate(0, hgt / 2, 0), std({ color: 0x1b1f2e, metalness: 0.8, roughness: 0.35 }), list, (o, d) => { const p = at(C, o.s, o.lat); d.position.set(p[0], 0, p[1]); });
-    add(new THREE.SphereGeometry(0.25, 10, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), list, (o, d, c) => { const p = at(C, o.s, o.lat * 0.9); d.position.set(p[0], hgt + 0.1, p[1]); c.set(color).multiplyScalar(2.4); }, true);
+    const pole = std({ color: 0x1b1f2e, metalness: 0.8, roughness: 0.35 }), reach = Math.abs(latOff) * 0.1;
+    add(new THREE.CylinderGeometry(0.07, 0.1, hgt, 6).translate(0, hgt / 2, 0), pole, list, (o, d) => { const p = at(C, o.s, o.lat); d.position.set(p[0], 0, p[1]); });
+    add(new THREE.BoxGeometry(0.08, 0.08, 1).translate(0, hgt, 0.5), pole, list, (o, d) => { const p = at(C, o.s, o.lat); d.position.set(p[0], 0, p[1]); d.rotation.y = C.h[Math.round(o.s)] + (o.lat > 0 ? Math.PI : 0); d.scale.z = reach; });
+    add(new THREE.SphereGeometry(0.25, 10, 6).scale(1.4, 0.5, 1), new THREE.MeshBasicMaterial({ color: 0xffffff }), list, (o, d, c) => { const p = at(C, o.s, o.lat * 0.9); d.position.set(p[0], hgt - 0.05, p[1]); c.set(color).multiplyScalar(2.4); }, true);
+    const pools = new THREE.MeshBasicMaterial({ map: GLOW, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    add(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), pools, list, (o, d, c) => { const p = at(C, o.s, o.lat * 0.82); d.position.set(p[0], 0.07, p[1]); d.scale.set(hgt * 1.5, 1, hgt * 1.5); c.set(color).multiplyScalar(0.55); }, true);
   };
 
+  // guard rails on the outside of the bends
+  const rails = (zn, color) => {
+    const posts = [], bars = [];
+    for (let s = zn.s; s < zn.e; s += 4) { if (Math.abs(C.k[s]) < 0.004) continue; for (const sd of [-1, 1]) { const p = at(C, s, sd * (HALF + 1.4)); posts.push({ x: p[0], z: p[1] }); const q = at(C, s + 2, sd * (HALF + 1.4)); bars.push({ x: q[0], z: q[1], rot: C.h[s + 2] }); } }
+    add(new THREE.BoxGeometry(0.18, 0.9, 0.18).translate(0, 0.45, 0), std({ color: 0x5a4a3a, roughness: 0.9 }), posts, (o, d) => d.position.set(o.x, 0, o.z));
+    add(new THREE.BoxGeometry(4.1, 0.28, 0.08).translate(0, 0.75, 0), std({ color, metalness: 0.7, roughness: 0.35 }), bars, (o, d) => { d.position.set(o.x, 0, o.z); d.rotation.y = o.rot; });
+  };
   /* ================= the zones ================= */
   const B = {};
 
@@ -151,20 +188,17 @@ export function buildZones(E) {
     const rotor = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 0.4), std({ color: 0x0a0a0c })); rotor.position.y = 1.4; heli.add(rotor);
     const rotor2 = rotor.clone(); rotor2.rotation.y = Math.PI / 2; rotor.add(rotor2);
     const nav = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0xff3344, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); nav.position.set(-7, 0.4, 0); nav.scale.setScalar(1.4); heli.add(nav);
-    const beam = new THREE.Mesh(new THREE.ConeGeometry(7, 1, 24, 1, true).translate(0, -0.5, 0), new THREE.MeshBasicMaterial({ color: 0xdfe8ff, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    // no visible cone through the air, just the pool of its searchlight sweeping the road
+    const beam = new THREE.Mesh(new THREE.PlaneGeometry(16, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: GLOW, color: 0xdfe8ff, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
     scene.add(heli, beam); heli.visible = beam.visible = false;
-    const hp = new THREE.Vector3(), tv = new THREE.Vector3(), cv = new THREE.Vector3();
+    const hp = new THREE.Vector3(), tv = new THREE.Vector3();
     live.push((t, dt, R, cam, zi2) => {
       const on = zi2 === zi; heli.visible = beam.visible = on; if (!on) { hp.set(R.x, 60, R.z); return; }
       tv.set(R.x + Math.cos(R.yaw) * 40 + Math.sin(t * 0.3) * 20, 48, R.z - Math.sin(R.yaw) * 40 + Math.cos(t * 0.3) * 20);
       hp.lerp(tv, 1 - Math.exp(-dt * 1.2)); heli.position.copy(hp); heli.lookAt(R.x, 30, R.z); heli.rotateY(-Math.PI / 2);
       rotor.rotation.y += dt * 40; nav.material.opacity = (t % 1) < 0.2 ? 1 : 0.2;
-      // the spot lands on the road ahead of you, so the camera never sits inside the beam
-      const d = tv.set(R.x + Math.cos(R.yaw) * 30, 0, R.z - Math.sin(R.yaw) * 30).sub(hp), L = d.length(); beam.position.copy(hp); beam.scale.set(0.7, L, 0.7);
-      beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), d.normalize());
-      // fade the beam out when it swings close to the camera, so it never fogs the whole screen
-      const k = clamp(cv.copy(cam.position).sub(hp).dot(d) / L, 0, 1), near = cv.copy(hp).addScaledVector(d, k * L).distanceTo(cam.position);
-      beam.material.opacity = 0.06 * smooth(6 + k * 5, 16 + k * 5, near);
+      // the spot lands on the road just ahead of you and wanders a little
+      beam.position.set(R.x + Math.cos(R.yaw) * 14 + Math.sin(t * 0.7) * 3, 0.12, R.z - Math.sin(R.yaw) * 14 + Math.cos(t * 0.9) * 3);
     });
   };
 
@@ -245,8 +279,9 @@ export function buildZones(E) {
     ribbon(a, b, HALF + 0.6, HALF + 2.4, 0.2, std({ color: 0x302a24 })); ribbon(a, b, -HALF - 0.6, -HALF - 2.4, 0.2, std({ color: 0x302a24 }));
   };
 
-  // 4 · Red Desert: a dirt track through mesas and cactus, with a train crossing
+  // 4 · Red Desert: a highway through mesas and cactus, with a train crossing
   B.desert = (zn, zi) => {
+    rails(zn, 0x9a9ea6);
     const mesas = [], rocks = [], cacti = [];
     for (let s = zn.s - 200; s < zn.e + 200; s += step(60)) { const sd = side(), off = 90 + rnd() * 500, p = at(C, s, sd * off), r = 20 + rnd() * 60; if (C.clear(p[0], p[1], r)) mesas.push({ x: p[0], z: p[1], r, hgt: 25 + rnd() * 70, rot: rnd() * 6 }); }
     add(new THREE.CylinderGeometry(0.8, 1, 1, 7).translate(0, 0.5, 0), std({ color: 0x8a3a22, roughness: 0.95, flatShading: true }), mesas, (o, d) => { d.position.set(o.x, 0, o.z); d.rotation.y = o.rot; d.scale.set(o.r, o.hgt, o.r * (0.6 + rnd() * 0.5)); });
@@ -272,16 +307,14 @@ export function buildZones(E) {
       [-0.75, 0.75].forEach((o) => { const a = P(-320), b = P(320), m = new THREE.Mesh(new THREE.BoxGeometry(640, 0.18, 0.12), std({ color: 0x8a8a90, metalness: 1, roughness: 0.3 })); m.position.set((a[0] + b[0]) / 2 + Math.cos(h0) * o, 0.28, (a[1] + b[1]) / 2 - Math.sin(h0) * o); m.rotation.y = h0 + Math.PI / 2; scene.add(m); });
       // crossing signs with lights that flash while the train is coming
       const xs = [-1, 1].map((sd) => { const p = at(C, tr.s - sd * 6, sd * (HALF + 2)), g = new THREE.Group(); g.position.set(p[0], 0, p[1]); g.rotation.y = h0; const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4.5, 6).translate(0, 2.25, 0), std({ color: 0xdddddd })); g.add(pole); const xb = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.35, 2.6), std({ color: 0xf2f2f2 })); xb.position.y = 4.1; xb.rotation.x = 0.7; g.add(xb); const xb2 = xb.clone(); xb2.rotation.x = -0.7; g.add(xb2); const ls = [-0.5, 0.5].map((z) => { const l = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0xff2020, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false })); l.position.set(0.2, 3.3, z); l.scale.setScalar(1.2); g.add(l); return l; }); scene.add(g); return ls; }).flat();
-      const carM = new THREE.InstancedMesh(new THREE.BoxGeometry(20, 4.2, 3.2).translate(0, 2.6, 0), std({ color: 0x5a3a2a, metalness: 0.4, roughness: 0.6 }), 7);
-      for (let k = 0; k < 7; k++) carM.setColorAt(k, tcol.set(k === 0 ? 0xd8a020 : [0x6a3a2a, 0x3a4a5a, 0x5a5a5a][k % 3]));
-      carM.frustumCulled = false; scene.add(carM);
+      const cars = trainCars(); cars.forEach((m) => scene.add(m));
       const lamp = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: 0xfff0c0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); lamp.scale.setScalar(5); scene.add(lamp);
       live.push((t) => {
-        const on = tr.t >= 0; carM.visible = lamp.visible = on;
+        const on = tr.t >= 0; lamp.visible = on; cars.forEach((m) => { m.visible = on; });
         xs.forEach((l, k) => { l.material.opacity = on && tr.pos < 60 ? ((t * 2 + (k % 2) * 0.5) % 1 < 0.5 ? 1 : 0) : 0; });
         if (!on) return;
-        for (let k = 0; k < 7; k++) { const l = tr.pos - 10 - k * 21.5, p = P(l); dummy.position.set(p[0], 0, p[1]); dummy.rotation.set(0, h0 + Math.PI / 2, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); carM.setMatrixAt(k, dummy.matrix); }
-        carM.instanceMatrix.needsUpdate = true; const f = P(tr.pos + 1); lamp.position.set(f[0], 3.2, f[1]);
+        cars.forEach((m, k) => { const l = tr.pos - 10 - k * 21.5, p = P(l); m.position.set(p[0], 0, p[1]); m.rotation.set(0, h0 + Math.PI / 2, 0); });
+        const f = P(tr.pos + 1); lamp.position.set(f[0], 3.2, f[1]);
       });
     }
   };
@@ -300,12 +333,6 @@ export function buildZones(E) {
     for (let s = zn.s - 400; s < zn.e + 400; s += step(120)) for (const sd of [-1, 1]) { const off = 350 + rnd() * 700, p = at(C, s, sd * off), r = 120 + rnd() * 220; if (C.clear(p[0], p[1], r * 0.9)) list.push({ x: p[0], z: p[1], r, hgt: 120 + rnd() * 260 }); }
     add(new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0), std({ color: snow ? 0x5a6070 : 0x18202a, roughness: 1, flatShading: true }), list, (o, d) => { d.position.set(o.x, -2, o.z); d.rotation.y = rnd() * 6; d.scale.set(o.r, o.hgt, o.r); });
     add(new THREE.ConeGeometry(1, 1, 7).translate(0, 0.5, 0), std({ color: 0xeef2fa, roughness: 0.7, flatShading: true }), list, (o, d) => { d.position.set(o.x, o.hgt * 0.62 - 2, o.z); d.rotation.y = rnd() * 6; d.scale.set(o.r * 0.39, o.hgt * 0.38, o.r * 0.39); });
-  };
-  const rails = (zn, color) => {
-    const posts = [], bars = [];
-    for (let s = zn.s; s < zn.e; s += 4) { if (Math.abs(C.k[s]) < 0.004) continue; for (const sd of [-1, 1]) { const p = at(C, s, sd * (HALF + 1.4)); posts.push({ x: p[0], z: p[1] }); const q = at(C, s + 2, sd * (HALF + 1.4)); bars.push({ x: q[0], z: q[1], rot: C.h[s + 2] }); } }
-    add(new THREE.BoxGeometry(0.18, 0.9, 0.18).translate(0, 0.45, 0), std({ color: 0x5a4a3a, roughness: 0.9 }), posts, (o, d) => d.position.set(o.x, 0, o.z));
-    add(new THREE.BoxGeometry(4.1, 0.28, 0.08).translate(0, 0.75, 0), std({ color, metalness: 0.7, roughness: 0.35 }), bars, (o, d) => { d.position.set(o.x, 0, o.z); d.rotation.y = o.rot; });
   };
   B.forest = (zn, zi) => {
     pines(zn, 6, false); mountains(zn, false); rails(zn, 0x8a8f98);
@@ -374,6 +401,7 @@ export function buildZones(E) {
 
   // 8 · Sunset Coast: beach and sea on one side, cliffs on the other, palms and a lighthouse
   B.coast = (zn, zi) => {
+    rails(zn, 0xc8ccd4);
     ribbon(zn.s - 40, zn.e + 40, HALF + 0.6, HALF + 26, 0.02, std({ color: 0xc8a070, roughness: 0.95 }));
     const surf = ribbon(zn.s - 40, zn.e + 40, HALF + 26, HALF + 30, 0.04, new THREE.MeshBasicMaterial({ color: 0xffe8d0, transparent: true, opacity: 0.35 }));
     live.push((t) => { surf.material.opacity = 0.2 + 0.2 * Math.sin(t * 1.4); });
