@@ -65,7 +65,9 @@ function paintGradient(geo, dir) {
 scene.add(new THREE.HemisphereLight(0x8fb0ff, 0x120a18, 0.4));
 const moon = new THREE.DirectionalLight(0xc8d4ff, 1.4); moon.position.set(-6, 10, 8); scene.add(moon);
 const rimBlue = new THREE.DirectionalLight(0x4796e3, 1.6); rimBlue.position.set(-8, 3, -6); scene.add(rimBlue);
-const rimRose = new THREE.DirectionalLight(0xca6673, 1.3); rimRose.position.set(8, 2, -5); scene.add(rimRose);
+const rimRose = new THREE.DirectionalLight(0xca6673, 0.7); rimRose.position.set(8, 2, -5); scene.add(rimRose);
+// studio key light that travels with the camera, so the black bike reads like a product shot
+const keyLight = new THREE.DirectionalLight(0xf2f4ff, 1.7); scene.add(keyLight, keyLight.target);
 
 const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24), new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
@@ -174,8 +176,8 @@ const beam = new THREE.Mesh(new THREE.ConeGeometry(1.1, 5.5, 32, 1, true).transl
 beam.rotation.z = Math.PI / 2 + 0.08; beam.position.set(1.04, 0.75, 0); body.add(beam);
 const spot = new THREE.SpotLight(0xdfe8ff, 0, 30, 0.45, 0.6, 1.2); spot.position.set(1.04, 0.76, 0); body.add(spot); spot.target.position.set(6, 0, 0); body.add(spot.target);
 const tailGlow = sprite(0xff3355, 0.5, 0.7); tailGlow.position.set(-1.0, 1.01, 0); body.add(tailGlow);
-const under = new THREE.PointLight(0x9177c7, 5, 4, 2); under.position.set(0, 0.2, 0); body.add(under);
-const underGlow = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.8), new THREE.MeshBasicMaterial({ map: GLOW, color: new THREE.Color(0x9177c7).multiplyScalar(1.4), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+const under = new THREE.PointLight(0x7d84a6, 2.2, 4, 2); under.position.set(0, 0.2, 0); body.add(under);
+const underGlow = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.8), new THREE.MeshBasicMaterial({ map: GLOW, color: new THREE.Color(0x9177c7).multiplyScalar(1.4), transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false }));
 underGlow.rotation.x = -Math.PI / 2; underGlow.position.y = 0.01; body.add(underGlow);
 
 // Exhaust flames: three nested noise cones, a flickering light and embers
@@ -345,7 +347,12 @@ function ride(p, t) {
   S.cam.copy(oc0).lerp(oc1, e).add(S.pos); S.look.copy(ol0).lerp(ol1, e).add(S.pos);
   S.cam.y -= S.pos.y * 0.4; S.look.y -= S.pos.y * 0.2;
   if (S.air) { const v = (u - 0.38) / 0.42, sw = Math.sin(Math.PI * v); S.cam.x += 4 * sw; S.cam.z += 3 * sw; S.cam.y += 2.2 * sw; }
-  if (S.high > 0) {
+  if (S.high > 0 && PORTRAIT) {
+    // phones are too narrow for the whole ring: ride along just outside it, looking in at the bike
+    const dx = S.pos.x - CIRCLE.x, dz = S.pos.z - CIRCLE.z, l = Math.hypot(dx, dz) || 1;
+    tmpV.set(CIRCLE.x + dx / l * (R + 6.5), 3.2, CIRCLE.z + dz / l * (R + 6.5)); S.cam.lerp(tmpV, S.high);
+    S.look.lerp(tmpV.set(S.pos.x, 0.6, S.pos.z), S.high);
+  } else if (S.high > 0) {
     const b = -0.5 + u;
     tmpV.set(CIRCLE.x + 13 * Math.sin(b), 11.5, CIRCLE.z + 13 * Math.cos(b)); S.cam.lerp(tmpV, S.high);
     S.look.lerp(tmpV.set(CIRCLE.x, 0.6, CIRCLE.z), S.high);
@@ -436,7 +443,7 @@ addEventListener("pointermove", (e) => { pointer.x = e.clientX / innerWidth * 2 
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let shake = 0, lastSeg = null, wasAir = false, wasRest = null, ignite = 0, idleW = 0, orbitA = 0, firstFrame = true, blip = 0, nextBlip = 1.5, flash = 0;
 const flashEl = document.getElementById("flash");
-let lastState = null, lastFrameMs = performance.now(), viewShift = 0, modelReady = false;
+let lastState = null, lastFrameMs = performance.now(), viewShift = 0, modelReady = false, modelHolder = null;
 
 function frame(t, dt, p) {
   ignite = clamp(ignite + dt * 1.6, 0, 1);
@@ -537,13 +544,14 @@ function frame(t, dt, p) {
   tmpV.set(S.pos.x + Math.sin(orbitA) * orbitR, Math.max(0.6, S.pos.y + orbitH), S.pos.z + Math.cos(orbitA) * orbitR);
   const want = tmpV2.copy(S.cam).lerp(tmpV, idleW);
   const lookWant = new THREE.Vector3().copy(S.look).lerp(new THREE.Vector3(S.pos.x, S.pos.y + 0.7, S.pos.z), idleW);
-  const fast = S.rest ? 4.2 : 14;
-  camPos.lerp(want, firstFrame ? 1 : 1 - Math.exp(-dt * fast));
-  camLook.lerp(lookWant, firstFrame ? 1 : 1 - Math.exp(-dt * (S.rest ? 6 : 18)));
+  const fast = S.rest ? 4.2 : PORTRAIT && S.high > 0 ? 24 : 14; // phones: hug the bike round the drift
+  camPos.lerp(want, firstFrame ? 1 : 1 - Math.exp(-rdt * fast));
+  camLook.lerp(lookWant, firstFrame ? 1 : 1 - Math.exp(-rdt * (S.rest ? 6 : PORTRAIT && S.high > 0 ? 30 : 18)));
   shake *= Math.exp(-dt * 5);
   camera.position.copy(camPos).add(tmpV.set(Math.sin(t * 73) * shake, Math.sin(t * 91) * shake, 0));
   camera.position.x += pointer.x * 0.15; camera.position.y += pointer.y * 0.1;
   camera.lookAt(camLook);
+  keyLight.position.copy(camera.position).add(tmpV.set(-1.5, 3.5, 0)); keyLight.target.position.copy(bike.position);
   // phones: shift the picture down so the parked bike sits below the words, not behind them
   const shiftWant = PORTRAIT ? (S.rest && p < LAST - 0.5 ? 0.26 : 0.08) : 0;
   viewShift += (shiftWant - viewShift) * (firstFrame ? 1 : 1 - Math.exp(-dt * 2.5));
@@ -565,53 +573,69 @@ function frame(t, dt, p) {
 }
 
 /* ---------------- real model: data-model="assets/models/bike.glb" on the canvas ----------------
-   data-model-yaw turns it to face +x; data-model-exhaust / -tail / -head are "x,y,z" anchors in bike units
-   (length ~2.05, ground at y = 0) so the flames, tail light and headlight sit on the model. */
+   A bike.json next to it (optional) turns the model to face +x, places the flames, tail light and headlight
+   ("x,y,z" in bike units: ~2.05 long, ground at y = 0) and gives each material a look, so any model can be
+   blacked out to match the site. */
+const LOOKS = {
+  paint: () => new THREE.MeshPhysicalMaterial({ color: 0x141519, metalness: 0.35, roughness: 0.36, clearcoat: 0.85, clearcoatRoughness: 0.16, envMapIntensity: 1.2 }),
+  satin: () => new THREE.MeshStandardMaterial({ color: 0x1a1b1f, metalness: 0.4, roughness: 0.45, side: THREE.DoubleSide }),
+  matte: () => new THREE.MeshStandardMaterial({ color: 0x0d0d0f, metalness: 0.05, roughness: 0.85 }),
+  rubber: () => new THREE.MeshStandardMaterial({ color: 0x0b0b0c, metalness: 0, roughness: 0.92 }),
+  disc: () => new THREE.MeshStandardMaterial({ color: 0x8d929c, metalness: 1, roughness: 0.32 }),
+  metal: () => new THREE.MeshStandardMaterial({ color: 0x2a2c31, metalness: 1, roughness: 0.35 }),
+  engine: () => new THREE.MeshStandardMaterial({ color: 0x18191c, metalness: 0.8, roughness: 0.45 }),
+  glass: () => new THREE.MeshPhysicalMaterial({ color: 0x2b3038, metalness: 0, roughness: 0.05, transparent: true, opacity: 0.45, clearcoat: 1, side: THREE.DoubleSide, depthWrite: false }),
+  taillight: () => new THREE.MeshStandardMaterial({ color: 0x3a0508, emissive: 0xff2233, emissiveIntensity: 1.4, roughness: 0.4 }),
+  amber: () => new THREE.MeshStandardMaterial({ color: 0x3a2205, emissive: 0xff8a1a, emissiveIntensity: 0.6, roughness: 0.4 })
+};
 function loadBikeModel(url) {
-  const d = canvas.dataset, vec = (v) => v && new THREE.Vector3(...v.split(",").map(Number));
-  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(url, (gltf) => {
-    const m = gltf.scene;
-    m.rotation.y = Number(d.modelYaw || 0);
-    m.updateMatrixWorld();
-    // fit: longest horizontal side → 2.05 bike units, wheels on the ground, centred
-    const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
-    m.scale.multiplyScalar(2.05 / Math.max(size.x, size.z));
-    m.updateMatrixWorld(); box.setFromObject(m); const c = box.getCenter(new THREE.Vector3());
-    m.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
-    const holder = new THREE.Group(); holder.add(m); holder.updateMatrixWorld(true); // holder space = bike units
+  const cfgUrl = url.replace(/\.glb$/i, ".json");
+  fetch(cfgUrl).then((r) => (r.ok ? r.json() : {})).catch(() => ({})).then((cfg) => {
+    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(url, (gltf) => fitModel(gltf.scene, cfg), undefined, () => { /* no model: keep the coded bike */ });
+  });
+}
+function fitModel(m, cfg) {
+  const vec = (v) => Array.isArray(v) && new THREE.Vector3(...v);
+  m.rotation.y = Number(cfg.yaw || 0);
+  m.updateMatrixWorld();
+  // fit: longest horizontal side → 2.05 bike units, wheels on the ground, centred
+  const box = new THREE.Box3().setFromObject(m), size = box.getSize(new THREE.Vector3());
+  m.scale.multiplyScalar(2.05 / Math.max(size.x, size.z));
+  m.updateMatrixWorld(); box.setFromObject(m); const c = box.getCenter(new THREE.Vector3());
+  m.position.sub(new THREE.Vector3(c.x, box.min.y, c.z));
+  const holder = new THREE.Group(); holder.add(m); holder.updateMatrixWorld(true); // holder space = bike units
 
-    // wheels: round, upright parts low at the front and back; each axle gets a pivot so it can spin
-    const parts = [], bb = new THREE.Box3(), sz = new THREE.Vector3(), ce = new THREE.Vector3();
-    m.traverse((o) => {
-      if (!o.isMesh) return;
-      o.castShadow = true;
-      bb.setFromObject(o); bb.getSize(sz); bb.getCenter(ce);
-      if (sz.y > 0.15 && Math.abs(sz.x - sz.y) < 0.03 && Math.abs(ce.x) > 0.45 && ce.y < 0.45) parts.push({ o, c: ce.clone() });
-    });
-    const axles = [1, -1].map((side) => {
-      const mine = parts.filter((p) => Math.sign(p.c.x) === side);
-      if (!mine.length) return null;
-      const ref = mine.reduce((a, p) => (p.c.y > a.c.y ? p : a)).c; // the tyre's centre is the axle
-      const pivot = new THREE.Group(); pivot.position.set(ref.x, ref.y, 0); holder.add(pivot); pivot.updateMatrixWorld();
-      mine.filter((p) => Math.hypot(p.c.x - ref.x, p.c.y - ref.y) < 0.03).forEach((p) => pivot.attach(p.o));
-      return pivot;
-    });
-    if (axles[0] && axles[1]) B.wheels = axles;
-    modelReady = true;
-    // swap: hide the coded bodywork (lights, flames and anchors stay)
-    B.bike.children.forEach((ch) => { if (ch.isGroup && ch !== flames) ch.visible = false; });
-    body.add(holder);
+  // looks: every material is swapped for one of ours (unlisted ones get cfg.look), so the bike is blacked out
+  const made = {}, mats = cfg.materials || {};
+  const look = (name) => { const k = LOOKS[mats[name]] ? mats[name] : LOOKS[cfg.look] ? cfg.look : null; return k && (made[k] = made[k] || LOOKS[k]()); };
+  // wheels: round, upright parts low at the front and back; each axle gets a pivot so it can spin
+  const parts = [], bb = new THREE.Box3(), sz = new THREE.Vector3(), ce = new THREE.Vector3();
+  m.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = true;
+    const nm = look(o.material.name); if (nm) o.material = nm;
+    bb.setFromObject(o); bb.getSize(sz); bb.getCenter(ce);
+    if (sz.y > 0.15 && Math.abs(sz.x - sz.y) < 0.03 && Math.abs(ce.x) > 0.45 && ce.y < 0.45) parts.push({ o, c: ce.clone() });
+  });
+  const axles = [1, -1].map((side) => {
+    const mine = parts.filter((p) => Math.sign(p.c.x) === side);
+    if (!mine.length) return null;
+    const ref = mine.reduce((a, p) => (p.c.y > a.c.y ? p : a)).c; // the tyre's centre is the axle
+    const pivot = new THREE.Group(); pivot.position.set(ref.x, ref.y, 0); holder.add(pivot); pivot.updateMatrixWorld();
+    mine.filter((p) => Math.hypot(p.c.x - ref.x, p.c.y - ref.y) < 0.03).forEach((p) => pivot.attach(p.o));
+    return pivot;
+  });
+  if (axles[0] && axles[1]) B.wheels = axles;
+  modelReady = true; modelHolder = holder;
+  // swap: hide the coded bodywork (lights, flames and anchors stay)
+  B.bike.children.forEach((ch) => { if (ch.isGroup && ch !== flames) ch.visible = false; });
+  body.add(holder);
 
-    // move the anchors onto the model
-    const anchor = (v) => { const o = new THREE.Object3D(); o.position.copy(v); body.add(o); return o; };
-    const ex = vec(d.modelExhaust), tail = vec(d.modelTail), head = vec(d.modelHead);
-    if (ex) flames.position.copy(ex);
-    if (tail) { B.tail = anchor(tail); tailGlow.position.copy(B.tail.position); }
-    if (head) {
-      const h = head;
-      ledGlow.position.copy(h); beam.position.copy(h); spot.position.copy(h); spot.target.position.set(h.x + 5, 0, 0);
-    }
-  }, undefined, () => { /* no model file: keep the coded bike */ });
+  // move the anchors onto the model
+  const ex = vec(cfg.exhaust), tail = vec(cfg.tail), head = vec(cfg.head);
+  if (ex) flames.position.copy(ex);
+  if (tail) { B.tail = new THREE.Object3D(); B.tail.position.copy(tail); body.add(B.tail); tailGlow.position.copy(tail); }
+  if (head) { ledGlow.position.copy(head); beam.position.copy(head); spot.position.copy(head); spot.target.position.set(head.x + 5, 0, 0); }
 }
 if (canvas.dataset.model) loadBikeModel(canvas.dataset.model);
 
@@ -625,9 +649,10 @@ if (REDUCED) {
   (function loop() {
     const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime;
     // progress follows real time (not the capped dt) so a slow device still lands on schedule
-    smoothP += (scrollP - smoothP) * (1 - Math.exp(-Math.min(raw, 0.25) * 5));
+    const follow = document.documentElement.classList.contains("quick-ride") ? 10 : 5; // nav shortcuts play the stunts fast
+    smoothP += (scrollP - smoothP) * (1 - Math.exp(-Math.min(raw, 0.25) * follow));
     if (!document.hidden) frame(t, dt, smoothP);
     requestAnimationFrame(loop);
   })();
 }
-window.__ride = { frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev } };
+window.__ride = { get green() { let n = 0; modelHolder && modelHolder.traverse((o) => { if (o.isMesh && o.material.color) { const h = {}; o.material.color.getHSL(h); if (h.s > 0.3 && h.l > 0.08) n++; } }); return modelHolder ? n : -1; }, frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev } };

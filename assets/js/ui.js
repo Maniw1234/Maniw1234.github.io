@@ -111,18 +111,20 @@
     else rideOff = setTimeout(function () { root.classList.remove("riding"); }, 420); // after the bike touches down
   }
 
-  function glide(target) {
+  function glide(target, quick) {
     var from = window.scrollY, dist = target - from;
     if (Math.abs(dist) < 2) return;
-    riding(true);
-    // one section per glide, slow enough to watch the whole stunt; sine easing keeps the middle from rushing
-    var dur = Math.min(4600, 3400 + Math.max(0, Math.abs(dist) / window.innerHeight - 1.6) * 500), t0 = performance.now();
+    riding(true); root.classList.toggle("quick-ride", !!quick);
+    // scrolling: one section per glide, slow enough to watch the whole stunt (sine easing keeps the middle
+    // from rushing). Nav links are shortcuts: the same stunts, played fast.
+    var dur = quick ? Math.min(1400, 800 + Math.abs(dist) / window.innerHeight * 120)
+      : Math.min(4600, 3400 + Math.max(0, Math.abs(dist) / window.innerHeight - 1.6) * 500), t0 = performance.now();
     step.busy = true;
     (function tick(now) {
       var k = Math.min(1, (now - t0) / dur), e = (1 - Math.cos(Math.PI * k)) / 2;
       window.scrollTo({ top: from + dist * e, behavior: "instant" });
       if (k < 1) requestAnimationFrame(tick);
-      else { step.busy = false; step.until = performance.now() + 450; riding(false); }
+      else { step.busy = false; step.until = performance.now() + 450; riding(false); root.classList.remove("quick-ride"); }
     })(t0);
   }
   function stepBy(dir) {
@@ -135,7 +137,7 @@
     var s = stops(), i = STOP_IDS.indexOf(id);
     if (id === "contact") i = s.length - 1;
     if (i < 0) return false;
-    glide(s[i]); return true;
+    glide(s[i], true); return true;
   }
   window.addEventListener("wheel", function (e) {
     if (!stepping() || e.ctrlKey) return;

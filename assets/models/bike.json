@@ -1,0 +1,38 @@
+{
+  "about": "Settings for bike.glb, read by main.js. Positions are in bike units: about 2.05 long, front at +x, ground at y = 0.",
+  "yaw": 3.14159,
+  "exhaust": [
+    -0.81,
+    0.53,
+    0.21
+  ],
+  "tail": [
+    -0.97,
+    0.8,
+    0
+  ],
+  "head": [
+    0.9,
+    0.78,
+    0
+  ],
+  "look": "satin",
+  "materials": {
+    "Vt_Liu.001": "paint",
+    "Vt_Liu.004": "satin",
+    "Vt_Liu.006": "satin",
+    "Vt_Liu.010": "satin",
+    "Vt_Liu": "satin",
+    "Vt_Liu.013": "matte",
+    "Vt_Liu.015": "glass",
+    "Vt_Liu.005": "rubber",
+    "Vt_Liu.009": "disc",
+    "Vt_Liu.020": "disc",
+    "Vt_Liu.002": "metal",
+    "Vt_Liu.018": "metal",
+    "Vt_Liu.007": "metal",
+    "Vt_Liu.011": "engine",
+    "Vt_Liu.019": "satin",
+    "Vt_Liu.008": "satin"
+  }
+}
