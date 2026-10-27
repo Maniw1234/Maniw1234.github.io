@@ -267,55 +267,87 @@ function resize() {
 }
 resize(); addEventListener("resize", resize);
 
-/* ---------------- choreography: progress p (0 to 1 over the page) → bike + camera ----------------
-   Sections map to fifths: hero 0-0.2, about 0.2-0.4, projects 0.4-0.6, skills 0.6-0.8, contact 0.8-1 */
+/* ---------------- choreography ----------------
+   p runs from 0 to 4 down the page. Whole numbers are the parked spots (hero, about, projects, skills,
+   contact): the bike sits on the ground there. Each step between two spots is one full stunt that lands. */
+const easeIO = (u) => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+const RAMP_A = Math.atan2(1.2, 6);
+const REST = [{ x: 0, yaw: -2.25 }, { x: 14, yaw: -0.5 }, { x: 48, yaw: 0.45 }, { x: 57, yaw: -0.5 }, { x: 64.5, yaw: -Math.PI / 2 }];
+const LAST = REST.length - 1;
+// camera and look-at for each parked spot, relative to the bike
+function restOffsets(i, cam, look) {
+  if (i === 0) { if (PORTRAIT) { cam.set(0, 1.6, 8.2); look.set(0, 0.2, 0); } else { cam.set(-1.3, 1.35, 6.8); look.set(-1.75, 0.75, 0); } return; }
+  if (i === LAST) { cam.set(0, 1.6, 6.6); look.set(0, PORTRAIT ? 1.7 : 2.0, 0); return; }
+  if (PORTRAIT) { cam.set(0, 1.8, 8.6); look.set(0, i === 2 ? -0.2 : 1.9, 0); return; }
+  cam.set(-1.2, 1.6, 7.2); look.set(i === 2 ? -1.2 : -2.0, i === 2 ? -0.3 : 0.7, 0);
+}
+const oc0 = new THREE.Vector3(), ol0 = new THREE.Vector3(), oc1 = new THREE.Vector3(), ol1 = new THREE.Vector3();
 function ride(p, t) {
-  const S = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, roll: 0, speed: 0, rpm: 1200, throttle: 0, smoke: 0, sparks: 0, seg: "A", cam: new THREE.Vector3(), look: new THREE.Vector3(), boost: 0 };
-  if (p < 0.2) { // hero: showroom pose, then a burnout spin
-    const a = smooth(0.1, 0.2, p);
-    S.yaw = -2.25 + Math.sin(t * 0.6) * 0.05 * (1 - a) + (2.25 + Math.PI * 2) * (a * a * (3 - 2 * a));
-    S.speed = Math.sin(Math.PI * a) * 0.35; S.rpm = 1250 + 7000 * Math.sin(Math.PI * a); S.throttle = Math.sin(Math.PI * a);
-    S.smoke = a > 0.02 && a < 0.98 ? 1 : 0; S.boost = Math.sin(Math.PI * a) * 0.6;
-    if (PORTRAIT) { S.cam.set(Math.sin(t * 0.25) * 0.25, 1.6, 8.2); S.look.set(0, 0.2, 0); }
-    else { S.cam.set(-1.3 + Math.sin(t * 0.25) * 0.25, 1.35, 6.8); S.look.set(-1.75, 0.75, 0); }
-  } else if (p < 0.4) { // about: wheelie launch across the screen, up the ramp
-    S.seg = "B"; const u = (p - 0.2) / 0.2;
-    const x = 32 * Math.pow(u, 1.7); S.pos.x = x;
-    const wheelie = 0.5 * smooth(0, 0.12, u) * (1 - smooth(0.32, 0.5, u));
-    const onRamp = clamp((x - 26) / 6, 0, 1), rampA = Math.atan2(1.2, 6);
-    S.pos.y = 1.2 * onRamp + 0.75 * Math.sin(wheelie);
-    S.pitch = Math.max(wheelie, onRamp > 0 ? rampA : 0);
-    S.speed = 0.35 + 0.65 * Math.pow(u, 0.6);
-    const g = u * 3, f = g - Math.floor(g); S.rpm = 5200 + 5600 * Math.pow(f, 0.7) + Math.floor(g) * 400; S.throttle = 1; S.boost = 0.6 + 0.4 * smooth(0, 0.2, u);
-    S.sparks = wheelie > 0.3 ? 0.4 : 0;
-    const cx = x - 1.3 - 1.5 * Math.sin(Math.PI * u);
-    S.cam.set(cx, 1.35 + u * 0.9, 6.8 + u * 2.6); S.look.set(cx - 0.45 + u * 0.5, 0.75 + u * 0.9, 0);
-  } else if (p < 0.6) { // projects: slow-motion backflip over the cards
-    S.seg = "C"; const s = (p - 0.4) / 0.2, u = clamp(s + 0.72 * Math.sin(2 * Math.PI * s) / (2 * Math.PI), 0, 1);
-    S.pos.set(32 + 14 * u, 1.2 * (1 - u) + 6 * Math.sin(Math.PI * u), 0);
-    S.pitch = Math.atan2(1.2, 6) * (1 - smooth(0, 0.15, u)) + Math.PI * 2 * smooth(0.12, 0.86, u);
-    S.yaw = 0.35 * Math.sin(Math.PI * u) ** 2; S.roll = -0.25 * Math.sin(2 * Math.PI * u);
-    S.speed = 0.9; S.rpm = 11800 - 2500 * u; S.throttle = 0.3; S.boost = 1 - u * 0.7;
-    const phi = 0.15 + 1.15 * smooth(0, 1, u), dist = 9 + 3 * Math.sin(Math.PI * u), h = 1.4 + 3.2 * Math.sin(Math.PI * u);
-    S.cam.set(S.pos.x + dist * Math.sin(phi), h + S.pos.y * 0.4, dist * Math.cos(phi)); S.look.copy(S.pos).add(tmpV.set(0, 0.6 - 1.4 * Math.sin(Math.PI * u), 0));
-  } else if (p < 0.8) { // skills: drift a full circle round the sparkle
-    S.seg = "D"; const u = (p - 0.6) / 0.2;
-    if (u < 0.12) S.pos.set(46 + 6 * (u / 0.12), 0, 0);
-    else if (u < 0.88) {
-      const al = Math.PI * 2 * (u - 0.12) / 0.76; S.pos.set(CIRCLE.x + R * Math.sin(al), 0, CIRCLE.z + R * Math.cos(al));
-      const env = smooth(0.12, 0.24, u) * (1 - smooth(0.76, 0.88, u)); S.yaw = al + 0.55 * env; S.roll = -0.62 * env; S.smoke = env > 0.4 ? 1 : 0; S.sparks = env > 0.6 ? 0.25 : 0;
-    } else S.pos.set(52 + 6 * ((u - 0.88) / 0.12), 0, 0);
-    S.speed = 0.75; S.rpm = 8600 + 700 * Math.sin(u * 38); S.throttle = 0.8; S.boost = 0.45;
+  const S = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, roll: 0, speed: 0, rpm: 1250, throttle: 0, smoke: 0, sparks: 0, seg: "R", cam: new THREE.Vector3(), look: new THREE.Vector3(), boost: 0, air: false, rest: false, high: 0 };
+  p = clamp(p, 0, LAST);
+  const i = Math.min(LAST - 1, Math.floor(p)), u = p - i;
+  if (u < 1e-4 || p >= LAST - 1e-4) { // parked
+    const k = p >= LAST - 1e-4 ? LAST : i, r = REST[k];
+    S.rest = true; S.pos.set(r.x, 0, 0); S.yaw = r.yaw + Math.sin(t * 0.6) * 0.03;
+    restOffsets(k, S.cam, S.look); S.cam.add(S.pos); S.look.add(S.pos);
+    return S;
+  }
+  if (i === 0) { // burnout spin, then a wheelie launch
+    S.seg = "A";
+    const a = smooth(0, 0.35, u), b = clamp((u - 0.35) / 0.65, 0, 1);
+    S.yaw = -2.25 + (2.25 + Math.PI * 2) * easeIO(a) + REST[1].yaw * smooth(0.85, 1, u);
+    S.pos.x = 14 * easeIO(b);
+    const wheelie = 0.5 * smooth(0.05, 0.2, b) * (1 - smooth(0.5, 0.75, b));
+    S.pos.y = 0.75 * Math.sin(wheelie); S.pitch = wheelie;
+    if (u < 0.35) { S.speed = 0.35 * Math.sin(Math.PI * a); S.rpm = 1250 + 7000 * Math.sin(Math.PI * a); S.throttle = Math.sin(Math.PI * a); S.smoke = a > 0.02 && a < 0.98 ? 1 : 0; S.boost = 0.6 * Math.sin(Math.PI * a); }
+    else { const g = b * 3, f = g - Math.floor(g); S.speed = Math.sin(Math.PI * b); S.rpm = 5200 + 5000 * Math.pow(f, 0.7) * (1 - b * 0.6); S.throttle = b < 0.6 ? 1 : 0.2; S.boost = Math.sin(Math.PI * b); S.sparks = wheelie > 0.3 ? 0.4 : 0; }
+  } else if (i === 1) { // up the ramp, backflip, land
+    if (u < 0.38) {
+      S.seg = "B"; const s = u / 0.38;
+      S.pos.x = 14 + 18 * s * s; S.yaw = REST[1].yaw * (1 - smooth(0, 0.2, s));
+      const on = clamp((S.pos.x - 26) / 6, 0, 1); S.pos.y = 1.2 * on; S.pitch = on > 0 ? RAMP_A : 0;
+      S.speed = 0.4 + 0.6 * s; S.rpm = 6000 + 5000 * s; S.throttle = 1; S.boost = smooth(0, 0.3, s);
+    } else if (u < 0.8) {
+      S.seg = "C"; S.air = true; const v = (u - 0.38) / 0.42;
+      S.pos.set(32 + 14 * v, 1.2 * (1 - v) + 6 * Math.sin(Math.PI * v), 0);
+      S.pitch = RAMP_A * (1 - smooth(0, 0.15, v)) + Math.PI * 2 * smooth(0.1, 0.88, v);
+      S.yaw = 0.35 * Math.sin(Math.PI * v) ** 2; S.roll = -0.25 * Math.sin(2 * Math.PI * v);
+      S.speed = 0.9; S.rpm = 11800 - 2500 * v; S.throttle = 0.3; S.boost = 1 - v * 0.7;
+    } else {
+      S.seg = "B"; const q = (u - 0.8) / 0.2;
+      S.pos.x = 46 + 2 * (1 - (1 - q) * (1 - q)); S.yaw = REST[2].yaw * smooth(0.3, 1, q);
+      S.speed = 0.9 * (1 - q); S.rpm = 1250 + 8000 * (1 - q); S.throttle = 0.2 * (1 - q);
+      S.smoke = q < 0.45 ? 1 : 0; S.sparks = q < 0.4 ? 0.6 : 0;
+    }
+  } else if (i === 2) { // drift a full circle round the sparkle
+    S.seg = "D"; S.high = smooth(0, 0.15, u) * (1 - smooth(0.85, 1, u));
+    if (u < 0.1) { const s = u / 0.1; S.pos.x = 48 + 4 * s; S.yaw = REST[2].yaw * (1 - s); }
+    else if (u < 0.85) {
+      const al = Math.PI * 2 * (u - 0.1) / 0.75, env = smooth(0.1, 0.22, u) * (1 - smooth(0.73, 0.85, u));
+      S.pos.set(CIRCLE.x + R * Math.sin(al), 0, CIRCLE.z + R * Math.cos(al));
+      S.yaw = al + 0.55 * env; S.roll = -0.62 * env; S.smoke = env > 0.4 ? 1 : 0; S.sparks = env > 0.6 ? 0.25 : 0;
+    } else { const q = (u - 0.85) / 0.15; S.pos.x = 52 + 5 * (1 - (1 - q) * (1 - q)); S.yaw = Math.PI * 2 + REST[3].yaw * smooth(0.4, 1, q); }
+    S.speed = 0.75 * (u > 0.85 ? 1 - (u - 0.85) / 0.15 : 1); S.rpm = 1250 + 7400 * S.speed / 0.75 + 600 * Math.sin(u * 38); S.throttle = 0.8 * S.speed / 0.75; S.boost = 0.45 * S.speed / 0.75;
+  } else { // power-slide to a stop, facing you
+    S.seg = "E";
+    if (u < 0.4) { const s = u / 0.4; S.pos.x = 57 + 3 * s * s; S.yaw = REST[3].yaw * (1 - smooth(0, 1, s)); S.speed = 0.3 + 0.45 * s; S.rpm = 5000 + 4000 * s; S.throttle = 1; S.boost = 0.6 * s; }
+    else {
+      const q = (u - 0.4) / 0.6, k = 1 - (1 - q) * (1 - q);
+      S.pos.x = 60 + 4.5 * k; S.yaw = -(Math.PI / 2) * smooth(0.05, 0.6, q); S.roll = 0.38 * Math.sin(Math.PI * smooth(0, 0.6, q));
+      S.speed = 0.75 * (1 - k); S.rpm = 1250 + 7200 * (1 - k); S.throttle = 0.2 * (1 - k);
+      S.smoke = q > 0.03 && q < 0.6 ? 1 : 0; S.sparks = q > 0.03 && q < 0.5 ? 1 : 0;
+    }
+  }
+  // camera follows the bike, blending from this spot's framing to the next one's
+  const e = easeIO(u);
+  restOffsets(i, oc0, ol0); restOffsets(i + 1, oc1, ol1);
+  S.cam.copy(oc0).lerp(oc1, e).add(S.pos); S.look.copy(ol0).lerp(ol1, e).add(S.pos);
+  S.cam.y -= S.pos.y * 0.4; S.look.y -= S.pos.y * 0.2;
+  if (S.air) { const v = (u - 0.38) / 0.42, sw = Math.sin(Math.PI * v); S.cam.x += 4 * sw; S.cam.z += 3 * sw; S.cam.y += 2.2 * sw; }
+  if (S.high > 0) {
     const b = -0.5 + u;
-    S.cam.set(CIRCLE.x + 13 * Math.sin(b), 11.5, CIRCLE.z + 13 * Math.cos(b)); S.look.set(CIRCLE.x, 0.6, CIRCLE.z);
-  } else { // contact: power-slide to a stop, facing you
-    S.seg = "E"; const u = (p - 0.8) / 0.2, k = 1 - Math.pow(1 - smooth(0, 0.55, u), 2);
-    S.pos.set(58 + 6.5 * k, 0, 0);
-    S.yaw = -(Math.PI / 2) * smooth(0.04, 0.5, u) + Math.sin(t * 0.7) * 0.04 * smooth(0.6, 1, u);
-    S.roll = 0.38 * Math.sin(Math.PI * smooth(0, 0.5, u));
-    S.speed = 0.7 * (1 - k); S.rpm = 1250 + 7200 * (1 - k); S.throttle = 0.2 * (1 - k);
-    S.smoke = u > 0.03 && u < 0.5 ? 1 : 0; S.sparks = u > 0.03 && u < 0.45 ? 1 : 0;
-    S.cam.set(64.5 + Math.sin(t * 0.25) * 0.25, 1.6, 6.6); S.look.set(64.5, PORTRAIT ? 1.7 : 2.0, 0);
+    tmpV.set(CIRCLE.x + 13 * Math.sin(b), 11.5, CIRCLE.z + 13 * Math.cos(b)); S.cam.lerp(tmpV, S.high);
+    S.look.lerp(tmpV.set(CIRCLE.x, 0.6, CIRCLE.z), S.high);
   }
   return S;
 }
@@ -358,6 +390,8 @@ function audioTick(S) {
   snd.eng.gain.setTargetAtTime(0.32 + S.throttle * 0.3, now, 0.05);
   snd.ng.gain.setTargetAtTime(S.smoke * 0.14 + (S.seg === "C" ? 0.12 : 0) + S.speed * 0.04, now, 0.08);
   snd.bp.frequency.setTargetAtTime(S.seg === "C" ? 900 : 2600, now, 0.2);
+  // parked: a quiet idle; riding or revving: full volume
+  snd.master.gain.setTargetAtTime(0.5 * (0.22 + 0.78 * clamp(Math.max(S.throttle, S.speed * 1.2), 0, 1)), now, 0.18);
 }
 const soundBtn = document.getElementById("sound");
 if (soundBtn) {
@@ -365,33 +399,32 @@ if (soundBtn) {
   soundBtn.addEventListener("click", () => {
     if (!snd.ctx) initAudio();
     snd.on = !snd.on; snd.ctx.resume();
-    snd.master.gain.setTargetAtTime(snd.on ? 0.5 : 0, snd.ctx.currentTime, 0.1);
+    snd.master.gain.setTargetAtTime(snd.on ? 0.12 : 0, snd.ctx.currentTime, 0.1);
     soundBtn.setAttribute("aria-pressed", String(snd.on));
     soundBtn.querySelector("span").textContent = snd.on ? "Sound on" : "Sound off";
   });
 }
 
-/* ---------------- scroll → progress, measured from the real sections ---------------- */
-const sections = ["hero", "about", "projects", "skills", "contact"].map((id) => document.getElementById(id)).filter(Boolean);
+/* ---------------- scroll → progress: parked spots at the hero, about, projects and skills tops and the page bottom ---------------- */
+const stopEls = ["hero", "about", "projects", "skills"].map((id) => document.getElementById(id)).filter(Boolean);
 let marks = [];
 function measure() {
   const y0 = scrollY;
-  marks = sections.map((s) => s.getBoundingClientRect().top + y0);
-  marks.push(document.documentElement.scrollHeight - innerHeight);
+  marks = stopEls.map((s) => s.getBoundingClientRect().top + y0);
+  marks.push(Math.max(marks[marks.length - 1] + 1, document.documentElement.scrollHeight - innerHeight));
 }
 function progressAt(y) {
   if (marks.length < 2) return 0;
-  const n = sections.length;
-  for (let i = 0; i < n; i++) {
-    const a = marks[i], b = Math.max(marks[i + 1], a + 1);
-    // each section's ride plays while it crosses the viewport; the last one ends at the bottom of the page
-    const end = i === n - 1 ? marks[n] : b;
-    if (y < end || i === n - 1) return clamp((i + clamp((y - a) / Math.max(1, end - a), 0, 1)) / n, 0, 1);
-  }
-  return 1;
+  let p = LAST;
+  for (let i = 0; i < marks.length - 1; i++) if (y < marks[i + 1]) { p = clamp(i + (y - marks[i]) / Math.max(1, marks[i + 1] - marks[i]), 0, LAST); break; }
+  return Math.abs(p - Math.round(p)) < 0.004 ? Math.round(p) : p; // within a few pixels of a section = parked there
 }
 measure(); addEventListener("resize", measure); addEventListener("load", measure);
 new ResizeObserver(measure).observe(document.body);
+
+// Gentle scrolling revs the parked bike (ui.js decides gentle vs hard)
+let revTarget = 0, rev = 0, lastRev = -1e9;
+window.__rideRev = (amount) => { revTarget = clamp(revTarget + amount, -1, 1); lastRev = performance.now(); };
 
 let scrollP = progressAt(scrollY), smoothP = scrollP, lastScroll = performance.now();
 addEventListener("scroll", () => { scrollP = progressAt(scrollY); lastScroll = performance.now(); }, { passive: true });
@@ -400,40 +433,57 @@ addEventListener("pointermove", (e) => { pointer.x = e.clientX / innerWidth * 2 
 
 /* ---------------- frame ---------------- */
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
-let shake = 0, lastSeg = null, ignite = 0, idleW = 0, orbitA = 0, firstFrame = true, blip = 0, nextBlip = 1.5, flash = 0;
+let shake = 0, lastSeg = null, wasAir = false, wasRest = null, ignite = 0, idleW = 0, orbitA = 0, firstFrame = true, blip = 0, nextBlip = 1.5, flash = 0;
 const flashEl = document.getElementById("flash");
+let lastState = null, lastFrameMs = performance.now();
 
 function frame(t, dt, p) {
   ignite = clamp(ignite + dt * 1.6, 0, 1);
+  // snap the last tiny bit so the bike settles exactly on its parked spot
+  if (scrollP === Math.round(scrollP) && Math.abs(scrollP - p) < 0.006) p = scrollP;
   const S = ride(p, t);
 
-  // Idle: once scrolling stops, the camera circles the bike like a showroom and the engine blips
-  const idle = !REDUCED && performance.now() - lastScroll > 900 && Math.abs(scrollP - smoothP) < 0.002;
+  // Rev: rolls the parked bike back and forth with throttle, flames and smoke
+  const nowMs = performance.now(), rdt = Math.min((nowMs - lastFrameMs) / 1000, 0.25); lastFrameMs = nowMs; // wall-clock, so rev settles on time on slow devices too
+  if (nowMs - lastRev > 160) revTarget *= Math.exp(-rdt * 5);
+  rev += ((S.rest ? revTarget : 0) - rev) * (1 - Math.exp(-rdt * 9));
+  if (Math.abs(rev) > 0.01) {
+    const fw = tmpV.set(Math.cos(S.yaw), 0, -Math.sin(S.yaw)).multiplyScalar(rev * 1.8);
+    S.pos.add(fw); S.cam.addScaledVector(fw, 0.45); S.look.addScaledVector(fw, 0.7);
+    const a = Math.abs(rev);
+    S.speed = Math.max(S.speed, a * 0.8); S.rpm = Math.max(S.rpm, 1250 + 9500 * a); S.throttle = Math.max(S.throttle, a);
+    S.boost = Math.max(S.boost, Math.max(0, rev) * 1.1); S.pitch += 0.28 * smooth(0.55, 1, rev);
+    if (a > 0.8) S.smoke = 1;
+  }
+
+  // Parked: the camera circles the bike like a showroom; the engine idles quietly with the odd blip
+  const idle = !REDUCED && S.rest && nowMs - lastScroll > 700 && nowMs - lastRev > 900 && Math.abs(rev) < 0.02;
   idleW += ((idle ? 1 : 0) - idleW) * (1 - Math.exp(-dt * (idle ? 0.9 : 4)));
   if (idleW < 0.01) orbitA = Math.atan2(camPos.x - S.pos.x, camPos.z - S.pos.z);
   orbitA += dt * 0.32 * idleW;
   if (idle && S.speed < 0.5) {
     nextBlip -= dt;
-    if (nextBlip < 0) { blip = 1; nextBlip = 2.2 + rnd() * 2.5; pop(0.6); }
+    if (nextBlip < 0) { blip = 0.6; nextBlip = 5 + rnd() * 4; pop(0.25); }
   }
   blip *= Math.exp(-dt * 3.5);
   S.rpm += blip * 6000 * idleW; S.throttle = Math.max(S.throttle, blip * idleW);
 
   // events
-  if (lastSeg === "C" && S.seg === "D") { shake = 0.35; spawnSparks(tmpV.copy(S.pos).setY(0.05), 140, new THREE.Vector3(-1, 0.6, 0), 1.6, 9); spawnSmoke(S.pos, 10); thump(1); flash = 0.18; }
-  if (lastSeg && lastSeg !== S.seg && S.boost > 0.3) pop(1);
-  lastSeg = S.seg;
+  if (wasAir && !S.air) { shake = 0.35; spawnSparks(tmpV.copy(S.pos).setY(0.05), 140, new THREE.Vector3(-1, 0.6, 0), 1.6, 9); spawnSmoke(S.pos, 10); thump(1); flash = 0.18; }
+  if (wasRest === true && !S.rest) pop(0.9);
+  if (wasRest === false && S.rest) pop(0.4);
+  wasAir = S.air; wasRest = S.rest; lastSeg = S.seg;
 
   // bike transform
   bike.position.copy(S.pos);
   bike.rotation.set(S.roll, S.yaw, S.pitch);
   body.position.y = (1 - S.speed) * 0.006 * Math.sin(t * 90) + S.rpm / 12000 * 0.004 * Math.sin(t * 140);
-  const roll = (S.speed * 26 + 2) * dt; B.wheels[0].rotation.z -= roll; B.wheels[1].rotation.z -= roll * (S.smoke ? 2.2 : 1);
+  const roll = (S.speed * 26 * (rev < -0.05 && S.rest ? -1 : 1) + 2) * dt; B.wheels[0].rotation.z -= roll; B.wheels[1].rotation.z -= roll * (S.smoke ? 2.2 : 1);
 
   // lights
   const lamp = ignite;
   ledGlow.material.opacity = lamp * 0.6; beam.material.uniforms.uI.value = lamp; spot.intensity = lamp * 40;
-  tailGlow.material.opacity = 0.5 + (S.seg === "E" ? 0.5 : 0);
+  tailGlow.material.opacity = 0.5 + (S.rest ? 0.35 : 0) + 0.3 * clamp(rev, 0, 1);
 
   // flames: steady with boost, plus random crackle and blips
   const crackle = (S.throttle > 0.5 && rnd() < 0.08) ? 0.6 : 0;
@@ -482,13 +532,13 @@ function frame(t, dt, p) {
   pad.material.opacity = 0.5 + 0.4 * Math.sin(t * 4);
 
   // camera: the ride's camera, blended into a slow orbit while idle
-  const orbitR = S.seg === "D" ? 9 : 6.2, orbitH = S.seg === "D" ? 4.5 : 1.5;
+  const orbitR = 6.2, orbitH = 1.5;
   tmpV.set(S.pos.x + Math.sin(orbitA) * orbitR, Math.max(0.6, S.pos.y + orbitH), S.pos.z + Math.cos(orbitA) * orbitR);
   const want = tmpV2.copy(S.cam).lerp(tmpV, idleW);
   const lookWant = new THREE.Vector3().copy(S.look).lerp(new THREE.Vector3(S.pos.x, S.pos.y + 0.7, S.pos.z), idleW);
-  const fast = S.seg === "B" ? 30 : 4.2;
+  const fast = S.rest ? 4.2 : 14;
   camPos.lerp(want, firstFrame ? 1 : 1 - Math.exp(-dt * fast));
-  camLook.lerp(lookWant, firstFrame ? 1 : 1 - Math.exp(-dt * (S.seg === "B" ? 30 : 6)));
+  camLook.lerp(lookWant, firstFrame ? 1 : 1 - Math.exp(-dt * (S.rest ? 6 : 18)));
   shake *= Math.exp(-dt * 5);
   camera.position.copy(camPos).add(tmpV.set(Math.sin(t * 73) * shake, Math.sin(t * 91) * shake, 0));
   camera.position.x += pointer.x * 0.15; camera.position.y += pointer.y * 0.1;
@@ -504,6 +554,7 @@ function frame(t, dt, p) {
   audioTick(S);
   composer.render(dt);
   firstFrame = false;
+  lastState = S;
   return S;
 }
 
@@ -534,10 +585,11 @@ if (REDUCED) {
   still(); addEventListener("resize", still);
 } else {
   (function loop() {
-    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
-    smoothP += (scrollP - smoothP) * (1 - Math.exp(-dt * 5));
+    const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime;
+    // progress follows real time (not the capped dt) so a slow device still lands on schedule
+    smoothP += (scrollP - smoothP) * (1 - Math.exp(-Math.min(raw, 0.25) * 5));
     if (!document.hidden) frame(t, dt, smoothP);
     requestAnimationFrame(loop);
   })();
 }
-window.__ride = { frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; } };
+window.__ride = { frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev } };

@@ -61,13 +61,15 @@
   }
 
   /* ---------- section-by-section scrolling ----------
-     With the 3D ride running, one flick of the wheel, a swipe or an arrow key glides the page to the
-     next section while the bike plays that part of the ride. Without 3D, or with reduced motion,
-     the page scrolls normally. */
-  var step = { busy: false, until: 0, acc: 0, accT: 0 };
+     With the 3D ride running, a hard scroll (or a flick, or an arrow key) glides the page to the next
+     section while the bike plays one full stunt and lands. A gentle scroll or slow drag keeps the page
+     still and revs the parked bike instead. Without 3D, or with reduced motion, the page scrolls normally. */
+  var STOP_IDS = ["hero", "about", "projects", "skills"];
+  var step = { busy: false, until: 0, hist: [] };
+  function rev(amount) { if (typeof window.__rideRev === "function") window.__rideRev(amount); }
   function stepping() { return root.classList.contains("has-gl") && !REDUCED && !(view && view.open); }
   function stops() {
-    var y0 = window.scrollY, list = SECTIONS.map(function (id) {
+    var y0 = window.scrollY, list = STOP_IDS.map(function (id) {
       var s = document.getElementById(id); return s ? Math.round(s.getBoundingClientRect().top + y0) : 0;
     });
     list.push(Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
@@ -92,33 +94,45 @@
     else { for (i = s.length - 1; i >= 0; i--) if (s[i] < y - 4) return glide(s[i]); }
   }
   function goTo(id) {
-    var i = SECTIONS.indexOf(id); if (i < 0) return false;
-    glide(stops()[i]); return true;
+    var s = stops(), i = STOP_IDS.indexOf(id);
+    if (id === "contact") i = s.length - 1;
+    if (i < 0) return false;
+    glide(s[i]); return true;
   }
   window.addEventListener("wheel", function (e) {
     if (!stepping() || e.ctrlKey) return;
     if (e.target.closest && e.target.closest(".rail") && Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
     e.preventDefault();
-    var now = performance.now();
-    if (now - step.accT > 220) step.acc = 0;
-    step.accT = now; step.acc += e.deltaY;
-    if (Math.abs(step.acc) > 24) { stepBy(step.acc > 0 ? 1 : -1); step.acc = 0; }
+    var now = performance.now(), dy = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? window.innerHeight : 1);
+    if (step.busy || now < step.until) return;
+    // hard = a big single jump, or a lot of scrolling in one direction within a quarter second
+    step.hist = step.hist.filter(function (h) { return now - h.t < 250 && (h.d > 0) === (dy > 0); });
+    step.hist.push({ t: now, d: dy });
+    var sum = step.hist.reduce(function (a, h) { return a + h.d; }, 0);
+    if (Math.abs(dy) >= 220 || Math.abs(sum) >= 280) { step.hist = []; rev(0); stepBy(dy > 0 ? 1 : -1); }
+    else rev(dy / 260);
   }, { passive: false });
   var touch = null;
   window.addEventListener("touchstart", function (e) {
     if (!stepping() || e.touches.length !== 1) { touch = null; return; }
-    touch = { x: e.touches[0].clientX, y: e.touches[0].clientY, inRail: !!(e.target.closest && e.target.closest(".rail")) };
+    var y = e.touches[0].clientY;
+    var t = e.timeStamp || performance.now();
+    touch = { x: e.touches[0].clientX, y: y, ly: y, t: t, pts: [{ y: y, t: t }], side: false, inRail: !!(e.target.closest && e.target.closest(".rail")) };
   }, { passive: true });
   window.addEventListener("touchmove", function (e) {
     if (!touch || !stepping()) return;
-    var dx = e.touches[0].clientX - touch.x, dy = e.touches[0].clientY - touch.y;
-    if (touch.inRail && Math.abs(dx) > Math.abs(dy)) return; // sideways swipe through the cards
+    var x = e.touches[0].clientX, y = e.touches[0].clientY, dx = x - touch.x, dy = y - touch.y;
+    if (touch.inRail && (touch.side || Math.abs(dx) > Math.abs(dy))) { touch.side = true; return; } // sideways through the cards
     e.preventDefault();
+    var now = e.timeStamp || performance.now();
+    touch.pts.push({ y: y, t: now }); while (touch.pts.length > 2 && now - touch.pts[0].t > 120) touch.pts.shift();
+    if (!step.busy && performance.now() >= step.until) rev((touch.ly - y) / 180); // slow drag revs the bike
+    touch.ly = y;
   }, { passive: false });
-  window.addEventListener("touchend", function (e) {
-    if (!touch || !stepping()) return;
-    var t = e.changedTouches[0], dx = t.clientX - touch.x, dy = t.clientY - touch.y;
-    if (Math.abs(dy) > 36 && Math.abs(dy) > Math.abs(dx)) stepBy(dy < 0 ? 1 : -1);
+  window.addEventListener("touchend", function () {
+    if (!touch || !stepping() || touch.side) { touch = null; return; }
+    var a = touch.pts[0], b = touch.pts[touch.pts.length - 1], v = (b.y - a.y) / Math.max(1, b.t - a.t), total = touch.ly - touch.y;
+    if (Math.abs(total) > 60 && Math.abs(v) > 0.45) { rev(0); stepBy(total < 0 ? 1 : -1); } // a flick rides to the next section
     touch = null;
   });
   document.addEventListener("keydown", function (e) {
