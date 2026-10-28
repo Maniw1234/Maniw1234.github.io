@@ -324,10 +324,9 @@ function racing(C, R, dt, ev) {
   }
 }
 // where you are in the race: 1 is in front
-// others: the other players in a multiplayer race, as { idx, done, time }
-export function place(C, R, done, others = []) {
+export function place(C, R, done) {
   const ahead = (s, d, t) => (done ? d && t < R.clock : s > R.idx);
-  return 1 + C.racers.filter((c) => ahead(c.s, c.done, c.time)).length + others.filter((o) => ahead(o.idx, o.done, o.time)).length;
+  return 1 + C.racers.filter((c) => ahead(c.s, c.done, c.time)).length;
 }
 
 export function reset(C, R) {
