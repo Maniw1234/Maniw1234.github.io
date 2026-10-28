@@ -10,7 +10,6 @@ import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { buildBike } from "./bike.js";
 import { buildCourse, newRider, step, reset, rewind, at, addRacers, place, HALF, TUNE } from "./course.js";
 import { buildZones, instanced } from "./zones.js";
-import { createNet, cleanCode } from "./net.js";
 
 const $ = (id) => document.getElementById(id);
 const canvas = $("game");
@@ -456,7 +455,7 @@ carCfg.then((cfg) => {
 });
 function placeRivals(dt) {
   for (const r of rivals) {
-    const c = r.c, near = !game.ai ? false : Math.abs(c.s - R.idx) < 650;
+    const c = r.c, near = Math.abs(c.s - R.idx) < 650;
     r.root.visible = near; if (!near) continue;
     const p = at(C, c.s, c.lat);
     r.root.position.set(p[0], c.y, p[1]);
@@ -590,7 +589,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyR" && game.mode === "run") { reset(C, R); flashMsg("Back on the road"); }
   if (e.code === "KeyM") toggleSound();
   if (e.code === "KeyC") { game.cam = (game.cam + 1) % 3; flashMsg(["Chase camera", "Far camera", "Low camera"][game.cam]); }
-  if (e.code === "Enter" && game.mode === "menu" && mode === "solo" && !e.target.closest("input")) start();
+  if (e.code === "Enter" && game.mode === "menu") start();
 });
 addEventListener("keyup", (e) => { const k = KEYMAP[e.code]; if (k) keys.delete(k); });
 addEventListener("blur", () => keys.clear());
@@ -604,17 +603,16 @@ const input = () => ({ up: keys.has("up") || touch.up ? 1 : 0, down: keys.has("d
 /* ---------------- game state ---------------- */
 let R = newRider(C);
 const best = store.get("ride-best") || null; // { time, splits }
-const game = { mode: "menu", ai: true, time: 0, count: 0, gate: 0, splits: [], orbs: 0, top: 0, air: 0, airNow: 0, jumps: 0, cam: 0, gear: 0, rpm: 1230, n: 0, shift: 0, rec: [], recT: 0, ghost: store.get("ride-ghost"), zone: -1, best, score: 0, combo: 0, comboT: 0, near: 0, bestTrick: null, lift: 0, cine: 0, slow: 1 };
+const game = { mode: "menu", time: 0, count: 0, gate: 0, splits: [], orbs: 0, top: 0, air: 0, airNow: 0, jumps: 0, cam: 0, gear: 0, rpm: 1230, n: 0, shift: 0, rec: [], recT: 0, ghost: store.get("ride-ghost"), zone: -1, best, score: 0, combo: 0, comboT: 0, near: 0, bestTrick: null, lift: 0, cine: 0, slow: 1 };
 const MPH = 2.23694, mph = (v) => Math.round(Math.abs(v) * MPH);
 // speed-trap bests are kept per trap, in course order
 const traps = C.events.filter((e) => e.type === "trap");
 (store.get("ride-traps") || []).forEach((b, i) => { if (traps[i] && b) traps[i].best = b; });
 const HUD = { zone: $("h-zone"), cp: $("h-cp"), time: $("h-time"), best: $("h-best"), orbs: $("h-orbs"), speed: $("h-speed"), gear: $("h-gear"), rpm: $("h-rpm"), nitro: $("h-nitro"), msg: $("h-msg"), big: $("h-big"), delta: $("h-delta"), score: $("h-score"), combo: $("h-combo"), trick: $("h-trick"), trickName: $("h-trick-name"), trickPts: $("h-trick-pts"), flash: $("h-flash"), pos: $("h-pos") };
-const field = () => (net.on ? remotes.size + 1 : rivals.length + 1);
 function raceHud() {
   const n = rivals.length + 1;
   HUD.pos.hidden = false; HUD.pos.innerHTML = ordinal(n) + "<small>/ " + n + "</small>";
-  $("st-race").hidden = mode !== "solo"; $("st-race").textContent = "You start at the back of a " + n + "-strong grid. Get to the front.";
+  $("st-race").hidden = false; $("st-race").textContent = "You start at the back of a " + n + "-strong grid. Get to the front.";
 }
 $("h-orbs-n").textContent = C.orbs.length;
 const fmt = (t) => { if (t == null) return "–"; const m = Math.floor(t / 60), s = t - m * 60; return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1); };
@@ -638,17 +636,11 @@ function show(id) { ["s-start", "s-pause", "s-done", "s-slow"].forEach((s) => { 
 
 function start() {
   initAudio(); if (snd.ctx) snd.ctx.resume();
-  // multiplayer races are only the players; solo races the AI grid
-  C.racers = net.on ? [] : soloRacers; game.ai = !net.on; game.race = net.on || rivals.length > 0;
+  C.racers = soloRacers; game.race = rivals.length > 0;
   rewind(C); world.resetTraps();
   R = newRider(C); useVehicle(vehicle);
-  if (net.on) {
-    const k = Math.max(0, net.players.findIndex((p) => p.id === net.me)), s0 = 4 + 7 * Math.floor(k / 2), lat = (k % 2 ? -1 : 1) * HALF * 0.35, p = at(C, s0, lat);
-    Object.assign(R, { x: p[0], z: p[1], yaw: p[2], idx: s0, best: s0, lat });
-    remotes.forEach((q) => { q.done = false; q.time = null; q.idx = 0; });
-  }
-  camYaw = R.yaw; firstFrame = true; HUD.pos.hidden = !game.race; $("d-standings").hidden = true; $("d-place-wrap").hidden = true; $("d-again").textContent = net.on ? "Back to the lobby" : "Ride again";
-  Object.assign(game, { mode: "count", time: 0, count: 3.999, gate: 0, splits: [], orbs: 0, top: 0, air: 0, jumps: 0, rec: [], recT: 0, zone: -1, ghost: store.get("ride-ghost"), score: 0, combo: 0, comboT: 0, near: 0, bestTrick: null, slow: 1, pos: field(), fin: null });
+  camYaw = R.yaw; firstFrame = true; HUD.pos.hidden = !game.race; $("d-place-wrap").hidden = true;
+  Object.assign(game, { mode: "count", time: 0, count: 3.999, gate: 0, splits: [], orbs: 0, top: 0, air: 0, jumps: 0, rec: [], recT: 0, zone: -1, ghost: store.get("ride-ghost"), score: 0, combo: 0, comboT: 0, near: 0, bestTrick: null, slow: 1, pos: rivals.length + 1 });
   if (game.race) HUD.pos.innerHTML = ordinal(game.pos) + "<small>/ " + game.pos + "</small>";
   HUD.orbs.textContent = "0"; HUD.cp.textContent = "Checkpoint 0/" + (C.gates.length - 1); HUD.delta.textContent = "";
   show(null); big("3");
@@ -670,8 +662,7 @@ function finish() {
   $("d-score").textContent = game.score.toLocaleString("en-US") + (game.score > bestScore && bestScore ? " (new best)" : "");
   $("d-trick").textContent = game.bestTrick ? game.bestTrick.name + " · " + game.bestTrick.pts.toLocaleString("en-US") : "None landed";
   $("d-near").textContent = String(game.near);
-  if (net.on) { game.fin = t; net.finish(t); standings(); $("d-best").textContent = "Waiting for the others to finish."; }
-  else if (game.race) {
+  if (game.race) {
     const pl = place(C, R, true), n = rivals.length + 1; game.place = pl;
     $("d-place-wrap").hidden = false; $("d-place").textContent = ordinal(pl) + " of " + n;
     $("d-best").textContent = (pl === 1 ? "You won the race! " : "You finished " + ordinal(pl) + ". ") + $("d-best").textContent;
@@ -690,7 +681,7 @@ document.querySelectorAll("[data-sound]").forEach((b) => { b.setAttribute("aria-
 $("st-go").addEventListener("click", start);
 $("p-resume").addEventListener("click", () => pause(false));
 $("p-restart").addEventListener("click", start);
-$("d-again").addEventListener("click", () => { if (!net.on) { start(); return; } net.backToLobby(); show("s-start"); });
+$("d-again").addEventListener("click", start);
 $("h-pause").addEventListener("click", () => pause(true));
 $("slow-keep").addEventListener("click", () => { perf.ignore = true; pause(false); if (game.mode !== "pause") show(null); });
 
@@ -705,124 +696,10 @@ function picker() {
 }
 function pickVehicle(id) {
   if (!modelReady) return;
-  useVehicle(id); store.set("ride-vehicle", vehicle); net.setVehicle(vehicle);
+  useVehicle(id); store.set("ride-vehicle", vehicle);
   document.querySelectorAll(".pick__item").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.veh === vehicle)));
 }
 picker();
-
-/* ---------------- multiplayer: room codes, the lobby, the other players on the road ---------------- */
-const remotes = new Map(); // id -> { name, veh, root, wheels, radius, a, b, ta, tb, idx, done, time }
-let netT = 0, mode = "solo";
-const others = () => [...remotes.values()].map((q) => ({ idx: q.idx, done: q.time != null, time: q.time }));
-const playerName = () => ($("mp-name").value.trim() || "Rider").slice(0, 14);
-$("mp-name").value = store.get("ride-name") || "";
-$("mp-name").addEventListener("change", () => store.set("ride-name", $("mp-name").value.trim()));
-function mpStatus(text, bad) { $("mp-status").textContent = text || ""; $("mp-status").classList.toggle("is-bad", !!bad); }
-function setMode(m) {
-  mode = m;
-  $("st-solo-btn").setAttribute("aria-pressed", String(m === "solo")); $("st-multi-btn").setAttribute("aria-pressed", String(m === "multi"));
-  $("st-solo").hidden = m !== "solo"; $("st-multi").hidden = m !== "multi"; $("st-race").hidden = m !== "solo" || !rivals.length;
-  if (m === "solo" && net.on) net.leave();
-}
-function lobbyUi(players, me, host) {
-  $("mp-join-box").hidden = true; $("mp-lobby").hidden = false; $("mp-room").textContent = net.code;
-  const ul = $("mp-players"); ul.textContent = "";
-  players.forEach((p) => {
-    const li = document.createElement("li"), n = document.createElement("span"), d = document.createElement("small");
-    n.textContent = p.name + (p.id === "host" ? " (host)" : "") + (p.id === me ? " · you" : ""); d.textContent = vehicleOf(p.veh).name;
-    li.append(n, d); li.classList.toggle("is-me", p.id === me); ul.appendChild(li);
-  });
-  $("mp-start").hidden = !host; $("mp-start").disabled = players.length < 2; $("mp-wait").hidden = host;
-  $("mp-start").textContent = players.length < 2 ? "Waiting for friends to join" : "Start the race";
-}
-function lobbyReset(text) {
-  $("mp-join-box").hidden = false; $("mp-lobby").hidden = true; mpStatus(text, !!text);
-}
-// the other players: their own vehicle, a name tag, and a smoothed copy of what they send
-function nameTag(text) {
-  const c = document.createElement("canvas"); c.width = 256; c.height = 64; const x = c.getContext("2d");
-  x.font = "700 30px Inter, system-ui, sans-serif"; const w = Math.min(244, x.measureText(text).width + 32);
-  x.fillStyle = "rgba(6,8,16,.72)"; x.beginPath(); x.roundRect(128 - w / 2, 8, w, 48, 24); x.fill();
-  x.fillStyle = "#fff"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(text, 128, 33);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, fog: false })); sp.scale.set(2.8, 0.7, 1); sp.renderOrder = 3; return sp;
-}
-function addRemote(p) {
-  const v = vehicleOf(p.veh); let o;
-  if (v.kind === "car") { o = fitCar(v.scene.clone(true), v.cfg, null, v.far); o.root.visible = true; }
-  else {
-    const root = new THREE.Group(), g = (h2.holder || B.bike).clone(true);
-    if (h2.holder) { g.scale.multiply(body.scale); g.position.multiply(body.scale); }
-    root.add(g, shadowBlob(2.6, 1.1)); o = { root, wheels: [], radius: 0.42 };
-  }
-  o.root.rotation.order = "YZX";
-  const tag = nameTag(p.name); tag.position.y = v.kind === "car" ? 2.4 : 2.3; o.root.add(tag);
-  o.root.visible = false; scene.add(o.root);
-  remotes.set(p.id, { name: p.name, veh: p.veh, ...o, a: null, b: null, ta: 0, tb: 0, idx: 0, time: null });
-}
-function dropRemote(id) { const q = remotes.get(id); if (!q) return; scene.remove(q.root); remotes.delete(id); }
-function clearRemotes() { [...remotes.keys()].forEach(dropRemote); }
-const lerpA = (a, b, u) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * u;
-function placeRemotes(dt) {
-  const now = performance.now();
-  remotes.forEach((q) => {
-    if (!q.b) { q.root.visible = false; return; }
-    const a = q.a || q.b, b = q.b, u = clamp((now - q.tb) / Math.max(30, q.tb - q.ta), 0, 1.25), L = (k) => a[k] + (b[k] - a[k]) * u;
-    q.root.visible = Math.abs(b[8] - R.idx) < 900;
-    q.root.position.set(L(0), L(2), L(1));
-    q.root.rotation.set(lerpA(a[4], b[4], u), lerpA(a[3], b[3], u) + lerpA(a[6], b[6], u), lerpA(a[5], b[5], u));
-    const roll = b[7] * dt / q.radius; q.wheels.forEach((w) => { w.rotation.z -= roll; });
-  });
-}
-const net = createNet({
-  lobby: (players, me, host) => {
-    lobbyUi(players, me, host);
-    // keep the other players' vehicles in step with the lobby
-    players.forEach((p) => { if (p.id === me) return; const q = remotes.get(p.id); if (q && (q.veh !== p.veh || q.name !== p.name)) dropRemote(p.id); if (!remotes.has(p.id)) addRemote(p); });
-    [...remotes.keys()].forEach((id) => { if (!players.some((p) => p.id === id)) dropRemote(id); });
-  },
-  start: (players) => {
-    players.forEach((p) => { if (p.id !== net.me && !remotes.has(p.id)) addRemote(p); });
-    [...remotes.keys()].forEach((id) => { if (!players.some((p) => p.id === id)) dropRemote(id); });
-    start();
-  },
-  state: (id, st) => { const q = remotes.get(id); if (!q || !Array.isArray(st) || st.length < 10) return; q.a = q.b; q.ta = q.tb; q.b = st; q.tb = performance.now(); q.idx = st[8]; },
-  fin: (id, time) => { const q = remotes.get(id); if (q) { q.time = Number(time); if (game.mode === "done") standings(); } },
-  left: (p) => { dropRemote(p.id); if (game.mode === "run" || game.mode === "count") flashMsg(p.name + " left the race", 1800); if (game.mode === "done") standings(); },
-  status: mpStatus,
-  closed: (text) => {
-    clearRemotes(); lobbyReset(text);
-    if (game.mode === "run" || game.mode === "count") flashMsg(text || "Multiplayer ended", 2400);
-  }
-});
-// the finish screen in a multiplayer race: everyone, in order
-function standings() {
-  const me = { name: playerName() + " (you)", time: game.fin, idx: R.idx, me: true };
-  const list = [me, ...[...remotes.values()].map((q) => ({ name: q.name, time: q.time, idx: q.idx }))]
-    .sort((a, b) => (a.time != null) !== (b.time != null) ? (a.time != null ? -1 : 1) : a.time != null ? a.time - b.time : b.idx - a.idx);
-  const ol = $("d-standings"); ol.textContent = ""; ol.hidden = false;
-  list.forEach((p) => { const li = document.createElement("li"), n = document.createElement("span"), d = document.createElement("small"); n.textContent = p.name; d.textContent = p.time != null ? fmt(p.time) : "still racing"; li.append(n, d); li.classList.toggle("is-me", !!p.me); ol.appendChild(li); });
-  const pl = list.indexOf(me) + 1; game.place = pl;
-  $("d-place-wrap").hidden = false; $("d-place").textContent = ordinal(pl) + " of " + list.length;
-  if (list.every((p) => p.time != null)) $("d-best").textContent = pl === 1 ? "You won the race!" : "You finished " + ordinal(pl) + ".";
-  $("d-again").textContent = "Back to the lobby";
-}
-$("st-solo-btn").addEventListener("click", () => setMode("solo"));
-$("st-multi-btn").addEventListener("click", () => setMode("multi"));
-$("mp-host").addEventListener("click", () => { store.set("ride-name", $("mp-name").value.trim()); net.hostGame(playerName(), vehicle); });
-$("mp-join").addEventListener("click", () => { store.set("ride-name", $("mp-name").value.trim()); net.join($("mp-code").value, playerName(), vehicle); });
-$("mp-code").addEventListener("input", (e) => { e.target.value = cleanCode(e.target.value); });
-$("mp-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("mp-join").click(); e.stopPropagation(); });
-$("mp-name").addEventListener("keydown", (e) => e.stopPropagation()); // typing a name must not drive the bike
-$("mp-start").addEventListener("click", () => net.start());
-$("mp-leave").addEventListener("click", () => { net.leave(); clearRemotes(); lobbyReset(""); });
-// the invite link opens Ride mode with the code already filled in
-$("mp-copy").addEventListener("click", () => {
-  const link = location.origin + location.pathname + "?room=" + net.code, done = (t) => { $("mp-copy").textContent = t; setTimeout(() => ($("mp-copy").textContent = "Copy invite link"), 1600); };
-  if (navigator.clipboard) navigator.clipboard.writeText(link).then(() => done("Copied"), () => done("Copy failed: share the code"));
-  else done("Share the code");
-});
-{ const code = cleanCode(new URLSearchParams(location.search).get("room")); if (code.length === 4) { setMode("multi"); $("mp-code").value = code; } }
 
 /* ---------------- minimap ---------------- */
 const map = $("h-map"), mctx = map.getContext("2d"), MS = 170;
@@ -842,7 +719,6 @@ function drawMap() {
   mctx.globalAlpha = 1;
   C.gates.forEach((s, i) => { const [a, b] = mp(C.x[s], C.z[s]); mctx.fillStyle = i < game.gate ? "#fff" : "rgba(255,255,255,.45)"; mctx.beginPath(); mctx.arc(a, b, 5, 0, 7); mctx.fill(); });
   rivals.forEach((r) => { const q = at(C, r.c.s, r.c.lat), [a, b] = mp(q[0], q[1]); mctx.fillStyle = "#ffb040"; mctx.beginPath(); mctx.arc(a, b, 5, 0, 7); mctx.fill(); });
-  remotes.forEach((q) => { if (!q.b) return; const [a, b] = mp(q.b[0], q.b[1]); mctx.fillStyle = "#7ac8ff"; mctx.beginPath(); mctx.arc(a, b, 6, 0, 7); mctx.fill(); });
   if (ghost.visible) { const [a, b] = mp(ghost.position.x, ghost.position.z); mctx.fillStyle = "#9a8cff"; mctx.beginPath(); mctx.arc(a, b, 6, 0, 7); mctx.fill(); }
   const [a, b] = mp(R.x, R.z);
   mctx.save(); mctx.translate(a, b); mctx.rotate(-R.yaw); mctx.fillStyle = "#fff"; mctx.shadowColor = "#fff"; mctx.shadowBlur = 10;
@@ -897,8 +773,8 @@ function tick(dt, raw) {
   }
   if (game.mode === "run") {
     // slow motion while the bike is in the air off a mega jump
-    const apex = R.air && !REDUCED && !net.on && Math.abs(R.vy) < 3 && R.airT > 0.2;
-    game.slow += ((R.air && R.mega && !net.on ? 0.45 : apex ? 0.6 : 1) - game.slow) * (1 - Math.exp(-Math.min(raw, 0.1) * 6)); dt *= game.slow;
+    const apex = R.air && !REDUCED && Math.abs(R.vy) < 3 && R.airT > 0.2;
+    game.slow += ((R.air && R.mega ? 0.45 : apex ? 0.6 : 1) - game.slow) * (1 - Math.exp(-Math.min(raw, 0.1) * 6)); dt *= game.slow;
     game.time += dt;
     // physics in small fixed steps
     let left = dt; const ev = {};
@@ -925,8 +801,8 @@ function tick(dt, raw) {
     if (ev.near) { game.near += ev.near; const got = addScore(150 * ev.near, true); flashMsg("Near miss +" + got + (game.combo > 1 ? "  ×" + Math.min(8, game.combo) : ""), 1000); }
     if (ev.bump) { breakCombo(); flashMsg("Contact!", 1000); flash("#ff5a5a"); }
     if (game.race) {
-      const pos = place(C, R, false, others());
-      if (pos !== game.pos) { HUD.pos.innerHTML = ordinal(pos) + "<small>/ " + field() + "</small>"; HUD.pos.className = "hud__pos " + (pos < game.pos ? "is-up" : "is-down"); if (pos < game.pos) flashMsg("Overtake! " + ordinal(pos), 1100); game.pos = pos; }
+      const pos = place(C, R, false);
+      if (pos !== game.pos) { HUD.pos.innerHTML = ordinal(pos) + "<small>/ " + (rivals.length + 1) + "</small>"; HUD.pos.className = "hud__pos " + (pos < game.pos ? "is-up" : "is-down"); if (pos < game.pos) flashMsg("Overtake! " + ordinal(pos), 1100); game.pos = pos; }
     }
     if (ev.train) { breakCombo(); big("Hit by the train", "is-zone"); flash("#ff5a5a"); shake = 0.5; }
     if (ev.avalanche) { flashMsg("Avalanche! Rocks coming down", 2200); shake = Math.max(shake, 0.2); }
@@ -953,10 +829,6 @@ function tick(dt, raw) {
   } else if (game.mode === "done") {
     // roll to a stop past the line
     step(C, R, { up: 0, down: R.v > 8 ? 0.5 : 0, left: 0, right: 0, nitro: 0 }, dt);
-  }
-  if (net.on && net.started && game.mode !== "menu") {
-    netT -= raw;
-    if (netT <= 0) { netT = 1 / 15; net.state([+R.x.toFixed(2), +R.z.toFixed(2), +R.y.toFixed(2), +R.yaw.toFixed(3), +R.lean.toFixed(3), +(R.pitch + R.wheelie + R.flip).toFixed(3), +R.spin.toFixed(3), +R.v.toFixed(1), Math.round(R.idx), R.boosting ? 1 : 0]); }
   }
   gearbox(dt, inp);
   const zi = blendZone(R.idx);
@@ -1032,7 +904,6 @@ function render(t, dt, inp) {
   spGeo.attributes.position.needsUpdate = true; spGeo.attributes.color.needsUpdate = true;
   placeOrbs(t, R.idx - 30, R.idx + 450);
   placeRivals(dt);
-  placeRemotes(dt);
 
   // camera
   const v = Math.abs(R.v), fwd = tmp.set(Math.cos(camYaw), 0, -Math.sin(camYaw));
@@ -1121,7 +992,7 @@ window.__game = {
   vehicle: () => ({ id: vehicle, car: !!R.car, list: VEHICLES.map((q) => q.id), bodyVisible: body.visible, carVisible: !!(carRig.root && carRig.root.visible), mute: snd.mute, spinning: (R.car ? carRig.wheels : h2.wheels).map((w) => w && +w.rotation.z.toFixed(2)) }),
   use: (id) => { useVehicle(id); store.set("ride-vehicle", vehicle); },
   fx: () => ({ punch: +jumpFx.punch.toFixed(2), ab: +jumpFx.ab.toFixed(2), lines: +jumpFx.lines.toFixed(2), rings: rings.filter((g) => g.m.visible).length, fov: +camera.fov.toFixed(1), slow: +game.slow.toFixed(2) }),
-  world, scene, net, remotes: () => [...remotes.values()].map((q) => ({ name: q.name, veh: q.veh, vis: q.root.visible, idx: q.idx, time: q.time, x: +q.root.position.x.toFixed(1), z: +q.root.position.z.toFixed(1) })),
+  world, scene,
   race: () => ({ on: !!game.race, n: rivals.length, pos: game.pos, place: game.place, wheels: rivals.map((r) => r.wheels.length), cars: rivals.map((r) => ({ name: r.c.name, s: +r.c.s.toFixed(1), v: +r.c.v.toFixed(1), lat: +r.c.lat.toFixed(2), y: +r.c.y.toFixed(2), vis: r.root.visible, done: r.c.done })) }),
   tick: (dt) => tick(dt, dt), sim: (n, dt = 1 / 30) => { skipDraw = true; try { for (let i = 0; i < n; i++) tick(dt, dt); } finally { skipDraw = false; } }, TUNE, info: () => { renderer.info.autoReset = false; renderer.info.reset(); renderer.render(scene, camera); const i = renderer.info; renderer.info.autoReset = true; return { calls: i.render.calls, tris: i.render.triangles, geos: i.memory.geometries, tex: i.memory.textures }; }
 };
