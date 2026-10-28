@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Ride mode | Mani</title>
-  <meta name="description" content="Ride Mani's blacked-out superbike or drive a supercar through ten zones: race the grid solo or race the supercar grid, throw flips and spins off the jumps and chase the ghost of your best run.">
+  <meta name="description" content="Ride Mani's blacked-out superbike yourself through ten zones: throw flips and spins off the jumps, collect sparkles, beat your best time and chase the ghost of your best run.">
   <meta name="theme-color" content="#05060b">
   <meta name="color-scheme" content="dark">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Mani">
   <meta property="og:title" content="Ride mode | Mani">
-  <meta property="og:description" content="Race the superbike or a supercar through ten zones.">
+  <meta property="og:description" content="Ride the blacked-out superbike yourself through ten zones.">
   <meta property="og:url" content="https://maniw1234.github.io/play.html">
   <meta property="og:image" content="https://maniw1234.github.io/assets/img/og.jpg">
   <meta name="twitter:card" content="summary_large_image">
@@ -82,7 +82,6 @@
     <div class="hud__tl">
       <p class="hud__zone" id="h-zone">Zone 1</p>
       <p class="hud__cp" id="h-cp">Checkpoint 0/5</p>
-      <p class="hud__pos" id="h-pos" hidden></p>
     </div>
     <div class="hud__tc">
       <p class="hud__time" id="h-time">0:00.0</p>
@@ -125,14 +124,8 @@
     <div class="screen__card">
       <p class="kicker">// ride mode</p>
       <h1 id="st-title">Take it for a <span class="g-text">ride.</span></h1>
-      <p class="screen__lead">Race through ten zones, from Midtown to the stadium, on the H2 or behind the wheel of a supercar. Throw flips and spins off the jumps, beat your best time and race the ghost of your best run.</p>
+      <p class="screen__lead">Ride the H2 through ten zones, from Midtown to the stadium. Throw flips and spins off the jumps, beat your best time and race the ghost of your best run.</p>
       <p class="screen__meta" id="st-length"></p>
-      <fieldset class="pick">
-        <legend>Your ride</legend>
-        <div class="pick__list" id="st-pick"></div>
-        <p class="pick__note">Only the H2 has engine sound for now.</p>
-      </fieldset>
-      <p class="screen__race" id="st-race" hidden></p>
       <ul class="keys keys--desk">
         <li><kbd>W</kbd><kbd>↑</kbd> Gas</li>
         <li><kbd>S</kbd><kbd>↓</kbd> Brake</li>
@@ -153,7 +146,7 @@
         <p id="st-best">No best time yet</p>
         <button class="sound" type="button" data-sound aria-pressed="true"><i aria-hidden="true"></i><span>Sound on</span></button>
       </div>
-      <p class="screen__credit">3D motorcycle: <a href="https://sketchfab.com/3d-models/kawashaki-ninja-h2-73eebe213a3043d1a1eb277c8ce05b5f" rel="noopener">&ldquo;Kawashaki ninja h2&rdquo;</a> by <a href="https://sketchfab.com/huy14320000006" rel="noopener">Jonrss</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web). Race cars: <a href="https://sketchfab.com/3d-models/lambo-v12-vision-gran-turismo-2020-0a0226e9545d43ce87ab033501920320" rel="noopener">&ldquo;Lambo V12 Vision Gran Turismo 2020&rdquo;</a> by <a href="https://sketchfab.com/sohyalebret" rel="noopener">kevin (ケビン)</a> and <a href="https://sketchfab.com/3d-models/sketchfab-texturing-challenge-sports-car-base-63b728d04de74575bc1c8029da8946f3" rel="noopener">&ldquo;Sketchfab Texturing Challenge: Sports Car Base&rdquo;</a> by <a href="https://sketchfab.com/kryik1023" rel="noopener">Renafox</a> (both repainted for the grid), and <a href="https://sketchfab.com/3d-models/2024-porsche-992-gt3-r-b76c9b2ae2d548c3869426eac4ab8a19" rel="noopener">&ldquo;2024 Porsche 992 GT3 R&rdquo;</a> by <a href="https://sketchfab.com/Tyler_Dave" rel="noopener">Dave Love SketchFab</a>, all <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a>. All models simplified and compressed for the web.</p>
+      <p class="screen__credit">3D motorcycle: <a href="https://sketchfab.com/3d-models/kawashaki-ninja-h2-73eebe213a3043d1a1eb277c8ce05b5f" rel="noopener">&ldquo;Kawashaki ninja h2&rdquo;</a> by <a href="https://sketchfab.com/huy14320000006" rel="noopener">Jonrss</a>, <a href="https://creativecommons.org/licenses/by/4.0/" rel="noopener">CC BY 4.0</a> (simplified and compressed for the web).</p>
     </div>
   </section>
 
@@ -177,13 +170,11 @@
       <h2 id="d-title" class="screen__time"><span class="g-text" id="d-time">0:00.0</span></h2>
       <p class="screen__lead" id="d-best"></p>
       <dl class="stats">
-        <div id="d-place-wrap" hidden><dt>Place</dt><dd id="d-place"></dd></div>
         <div><dt>Sparkles</dt><dd id="d-orbs"></dd></div>
         <div><dt>Top speed</dt><dd id="d-top"></dd></div>
         <div><dt>Air time</dt><dd id="d-air"></dd></div>
         <div><dt>Score</dt><dd id="d-score"></dd></div>
         <div><dt>Best trick</dt><dd id="d-trick"></dd></div>
-        <div><dt>Near misses</dt><dd id="d-near"></dd></div>
       </dl>
       <div class="screen__cta">
         <button class="btn btn--primary" id="d-again" type="button">Ride again</button>
