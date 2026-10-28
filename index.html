@@ -93,7 +93,7 @@
 
   <header class="nav">
     <div class="nav__bar">
-      <a class="nav__brand" href="#hero" aria-label="Mani, back to top">
+      <a class="nav__brand" href="#hero" data-section="hero" aria-label="Mani, back to top">
         <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 2c1.6 15.2 14.8 28.4 30 30-15.2 1.6-28.4 14.8-30 30C30.4 46.8 17.2 33.6 2 32 17.2 30.4 30.4 17.2 32 2z" fill="url(#spark-grad)"/></svg>
         <span>mani</span>
       </a>
@@ -110,11 +110,14 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
           <i aria-hidden="true"></i><span>Sound off</span>
         </button>
-        <a class="nav__play" href="play.html">Play</a>
       </div>
       <span class="nav__glint" aria-hidden="true"></span>
     </div>
   </header>
+  <a class="play-cta" href="play.html" aria-label="Play: ride the bike yourself">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>
+    <span>Play</span>
+  </a>
 
   <main>
     <section class="sec sec--hero" id="hero" aria-labelledby="hero-title">

@@ -1,4 +1,4 @@
-// Page UI that works with or without the 3D ride: menu, section spy, section-by-section scrolling,
+// Page UI that works with or without the 3D ride: nav and its way-in, section spy, section-by-section scrolling,
 // project cards (loaded from content/projects.json) and the full-screen project view.
 (function () {
   "use strict";
@@ -46,7 +46,7 @@
     bar.style.setProperty("--gx", (r.left + r.width / 2 - b.left) + "px");
     bar.style.setProperty("--ga", "1");
   }
-  function restGlint() { glintAt(document.querySelector(".nav__links a.is-active")); }
+  function restGlint() { glintAt(document.querySelector(".nav a.is-active[data-section]")); }
   if (bar) {
     bar.addEventListener("pointermove", function (e) {
       if (e.pointerType !== "mouse") return;
@@ -58,16 +58,38 @@
     window.addEventListener("resize", restGlint);
   }
 
-  /* ---------- active section in the nav ---------- */
+  /* ---------- active section in the nav ----------
+     The brand stands for the top of the page. During a ride the line goes straight to where the ride
+     ends, instead of flickering across every section the page passes on the way. */
   var SECTIONS = ["hero", "about", "projects", "skills", "contact"];
-  var links = document.querySelectorAll(".nav__links a[data-section]");
+  var links = document.querySelectorAll(".nav a[data-section]"), seen = "hero", shown = "hero", introDone = false;
+  function setActive(id) {
+    shown = id;
+    if (!introDone) return; // the first line draws under mani as the bar's way-in animation ends
+    links.forEach(function (a) { a.classList.toggle("is-active", a.dataset.section === id); });
+    if (!hovering) restGlint();
+  }
+  function endIntro() { introDone = true; setActive(shown); }
+  if (!root.classList.contains("is-loading") && !root.classList.contains("is-loaded")) endIntro();
+  else {
+    var waitIntro = function () {
+      if (!root.classList.contains("is-loaded")) return false;
+      setTimeout(endIntro, REDUCED ? 0 : 1600); return true;
+    };
+    if (!waitIntro()) {
+      var mo = new MutationObserver(function () { if (waitIntro()) mo.disconnect(); });
+      mo.observe(root, { attributes: true, attributeFilter: ["class"] });
+    }
+  }
+  /* Play steps aside at the footer, so it never covers the last lines */
+  var foot = document.querySelector(".footer");
+  if (foot && "IntersectionObserver" in window) {
+    new IntersectionObserver(function (en) { root.classList.toggle("at-end", en[0].isIntersecting); }).observe(foot);
+  }
   if ("IntersectionObserver" in window) {
     var spy = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) {
-        if (!en.isIntersecting) return;
-        links.forEach(function (a) { a.classList.toggle("is-active", a.dataset.section === en.target.id); });
-        if (!hovering) restGlint();
-      });
+      entries.forEach(function (en) { if (en.isIntersecting) seen = en.target.id; });
+      if (!step.busy) setActive(seen);
     }, { rootMargin: "-45% 0px -50% 0px" });
     SECTIONS.forEach(function (id) { var s = document.getElementById(id); if (s) spy.observe(s); });
   }
@@ -128,13 +150,15 @@
     var dur = quick ? Math.min(1400, 800 + Math.abs(dist) / window.innerHeight * 120)
       : Math.min(4600, 3400 + Math.max(0, Math.abs(dist) / window.innerHeight - 1.6) * 500), t0 = performance.now();
     step.busy = true;
+    var s = stops(), at = s.indexOf(Math.round(target));
+    if (at >= 0) setActive(at === s.length - 1 ? "contact" : STOP_IDS[at]);
     var landAt = quick ? 0.6 : 0.75; // the bike touches down about here: the words fly back in as it lands
     (function tick(now) {
       var k = Math.min(1, (now - t0) / dur), e = (1 - Math.cos(Math.PI * k)) / 2;
       window.scrollTo({ top: from + dist * e, behavior: "instant" });
       if (k >= landAt) riding(false);
       if (k < 1) requestAnimationFrame(tick);
-      else { step.busy = false; step.until = performance.now() + 300; root.classList.remove("quick-ride"); }
+      else { step.busy = false; step.until = performance.now() + 300; root.classList.remove("quick-ride"); setActive(seen); }
     })(t0);
   }
   function stepBy(dir) {
