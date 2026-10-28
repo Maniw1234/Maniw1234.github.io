@@ -37,17 +37,25 @@
   var ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M13.5 6l-3 12"/></svg>';
   var ACCENTS = [["#4796e3", "#9177c7"], ["#ca6673", "#9177c7"], ["#3fa8c4", "#4796e3"], ["#9177c7", "#ca6673"]];
 
-  /* ---------- mobile menu ---------- */
-  var nav = document.querySelector(".nav"), toggle = document.querySelector(".nav__toggle");
-  function setMenu(open) {
-    nav.classList.toggle("is-open", open);
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  /* ---------- nav glint: the light on the bar's top edge follows the pointer, else rests on the active link ---------- */
+  var bar = document.querySelector(".nav__bar"), hovering = false;
+  function glintAt(el) {
+    if (!bar) return;
+    if (!el) { bar.style.setProperty("--ga", "0"); return; }
+    var b = bar.getBoundingClientRect(), r = el.getBoundingClientRect();
+    bar.style.setProperty("--gx", (r.left + r.width / 2 - b.left) + "px");
+    bar.style.setProperty("--ga", "1");
   }
-  if (nav && toggle) {
-    toggle.addEventListener("click", function () { setMenu(!nav.classList.contains("is-open")); });
-    nav.querySelectorAll(".nav__links a").forEach(function (a) { a.addEventListener("click", function () { setMenu(false); }); });
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && nav.classList.contains("is-open")) { setMenu(false); toggle.focus(); } });
+  function restGlint() { glintAt(document.querySelector(".nav__links a.is-active")); }
+  if (bar) {
+    bar.addEventListener("pointermove", function (e) {
+      if (e.pointerType !== "mouse") return;
+      hovering = true;
+      bar.style.setProperty("--gx", (e.clientX - bar.getBoundingClientRect().left) + "px");
+      bar.style.setProperty("--ga", "1");
+    });
+    bar.addEventListener("pointerleave", function () { hovering = false; restGlint(); });
+    window.addEventListener("resize", restGlint);
   }
 
   /* ---------- active section in the nav ---------- */
@@ -58,6 +66,7 @@
       entries.forEach(function (en) {
         if (!en.isIntersecting) return;
         links.forEach(function (a) { a.classList.toggle("is-active", a.dataset.section === en.target.id); });
+        if (!hovering) restGlint();
       });
     }, { rootMargin: "-45% 0px -50% 0px" });
     SECTIONS.forEach(function (id) { var s = document.getElementById(id); if (s) spy.observe(s); });
