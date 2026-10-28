@@ -25,7 +25,6 @@ try {
 renderer.setPixelRatio(LITE ? 1 : Math.min(devicePixelRatio, 1.75));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = LITE ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap; // only the daytime sun casts
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x04050a);
@@ -55,7 +54,7 @@ function paintGradient(geo, dir) {
 }
 
 /* ---------------- environment: studio strips so the black paint has highlights ---------------- */
-let nightEnv = null, dayEnv = null;
+let nightEnv = null, dayEnv = null, makeDayEnv = null;
 {
   const pmrem = new THREE.PMREMGenerator(renderer), env = new THREE.Scene();
   env.add(new THREE.Mesh(new THREE.SphereGeometry(30, 32, 16), new THREE.MeshBasicMaterial({ color: 0x07080e, side: THREE.BackSide })));
@@ -65,16 +64,17 @@ let nightEnv = null, dayEnv = null;
   });
   scene.environment = pmrem.fromScene(env, 0.03).texture;
   nightEnv = scene.environment;
-  // daylight reflections: blue sky above, bright ground bounce, the sun
+  // daylight reflections: blue sky above, bright ground bounce, the sun (built the first time Day is switched on)
+  makeDayEnv = () => {
+  makeDayEnv = null;
   const day = new THREE.Scene();
   day.add(new THREE.Mesh(new THREE.SphereGeometry(30, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }", fragmentShader: "varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0. ? mix(vec3(0.85,0.9,1.), vec3(0.3,0.55,0.95), h) : mix(vec3(0.6,0.58,0.55), vec3(0.3), -h); gl_FragColor = vec4(c * 1.4, 1.); }" })));
   const sun = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.95, 0.85).multiplyScalar(30) })); sun.position.set(14, 8, -20); day.add(sun);
   dayEnv = pmrem.fromScene(day, 0.02).texture;
+  };
 }
 const hemi = new THREE.HemisphereLight(0x8fb0ff, 0x120a18, 0.4); scene.add(hemi);
 const moon = new THREE.DirectionalLight(0xc8d4ff, 1.4); moon.position.set(-6, 10, 8); scene.add(moon);
-moon.shadow.mapSize.setScalar(LITE ? 512 : 1024); moon.shadow.bias = -0.0005;
-Object.assign(moon.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 30 }); moon.shadow.camera.updateProjectionMatrix(); scene.add(moon.target);
 const rimBlue = new THREE.DirectionalLight(0x4796e3, 1.6); rimBlue.position.set(-8, 3, -6); scene.add(rimBlue);
 const rimRose = new THREE.DirectionalLight(0xca6673, 0.7); rimRose.position.set(8, 2, -5); scene.add(rimRose);
 // studio key light that travels with the camera, so the black bike reads like a product shot
@@ -150,9 +150,13 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
     }`
 }));
 ground.rotation.x = -Math.PI / 2; scene.add(ground);
-// daytime: the sun casts a real shadow of the bike onto the ground
-const shadowCatch = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ opacity: 0, transparent: true }));
-shadowCatch.rotation.x = -Math.PI / 2; shadowCatch.position.y = 0.004; shadowCatch.receiveShadow = true; shadowCatch.visible = false; shadowCatch.renderOrder = 2; scene.add(shadowCatch);
+// daytime: a soft contact shadow under the bike (a painted blob, so no shadow maps for the GPU to build)
+const shadowBlob = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 128; const g = c.getContext("2d"), r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, "rgba(0,0,0,1)"); r.addColorStop(0.45, "rgba(0,0,0,.7)"); r.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = r; g.fillRect(0, 0, 128, 128);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.15), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, opacity: 0, fog: false }));
+  m.rotation.order = "YXZ"; m.rotation.x = -Math.PI / 2; m.position.y = 0.006; m.renderOrder = 2; m.visible = false; scene.add(m); return m;
+})();
 
 // Roadside light posts
 let lampCaps = null;
@@ -699,11 +703,11 @@ function frame(t, dt, p) {
   hemi.intensity = 0.4 + 1.1 * D; hemi.color.setRGB(0.56 + 0.2 * D, 0.69 + 0.15 * D, 1); hemi.groundColor.setRGB(0.07 + 0.35 * D, 0.04 + 0.33 * D, 0.09 + 0.28 * D);
   moon.intensity = 1.4 + 2.4 * D; moon.color.copy(MOON_C).lerp(SUN_C, D);
   rimBlue.intensity = 1.6 * (1 - 0.8 * D); rimRose.intensity = 0.7 * (1 - 0.8 * D); keyLight.intensity = 1.7 * (1 - 0.5 * D);
+  if (D > 0 && makeDayEnv) makeDayEnv();
   if (dayEnv) scene.environment = D > 0.5 ? dayEnv : nightEnv;
-  // the sun's shadow follows the bike (dropped if the device is struggling)
-  const sunOn = D > 0.02 && perf.level < 2;
-  moon.castShadow = sunOn; shadowCatch.visible = sunOn; shadowCatch.material.opacity = 0.5 * D;
-  if (sunOn) { moon.position.set(bike.position.x - 6, 10, bike.position.z + 8); moon.target.position.copy(bike.position); moon.target.updateMatrixWorld(); shadowCatch.position.x = bike.position.x; shadowCatch.position.z = bike.position.z; }
+  // the contact shadow sits under the bike and turns with it; it fades as the bike leaves the ground
+  shadowBlob.visible = D > 0.01; shadowBlob.material.opacity = 0.6 * D / (1 + 2 * Math.max(0, bike.position.y));
+  if (shadowBlob.visible) { shadowBlob.position.x = bike.position.x + 0.15; shadowBlob.position.z = bike.position.z + 0.1; shadowBlob.rotation.y = bike.rotation.y; }
   if (lampCaps) lampCaps.material.color.setScalar(1 - 0.8 * D); // street lamps off in daylight
   monGlow.material.opacity = 0.5 * (1 - 0.8 * D); monLight.intensity = 60 * (1 - 0.7 * D);
   beam.material.uniforms.uI.value *= 1 - 0.7 * D; ledGlow.material.opacity *= 1 - 0.5 * D;
@@ -759,7 +763,6 @@ function fitModel(m, cfg) {
   const parts = [], bb = new THREE.Box3(), sz = new THREE.Vector3(), ce = new THREE.Vector3();
   m.traverse((o) => {
     if (!o.isMesh) return;
-    o.castShadow = true;
     const nm = look(o.material.name); if (nm) o.material = nm;
     bb.setFromObject(o); bb.getSize(sz); bb.getCenter(ce);
     if (sz.y > 0.15 && Math.abs(sz.x - sz.y) < 0.03 && Math.abs(ce.x) > 0.45 && ce.y < 0.45) parts.push({ o, c: ce.clone() });
@@ -811,6 +814,10 @@ function governor(raw) {
 
 /* ---------------- drive ---------------- */
 document.documentElement.classList.add("has-gl");
+// if the graphics driver drops the 3D view, fall back to the plain page instead of a frozen picture
+let lost = false;
+canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); lost = true; document.documentElement.classList.remove("has-gl"); document.documentElement.classList.add("gl-lost"); });
+canvas.addEventListener("webglcontextrestored", () => location.reload());
 const clock = new THREE.Clock();
 let redraw = () => {};
 if (REDUCED) {
@@ -818,12 +825,13 @@ if (REDUCED) {
   still(); addEventListener("resize", still); redraw = still;
 } else {
   (function loop() {
+    if (lost) return;
+    requestAnimationFrame(loop); // first, so one bad frame never freezes the scene
     const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime;
     // progress follows real time (not the capped dt) so a slow device still lands on schedule
     const follow = document.documentElement.classList.contains("quick-ride") ? 10 : 5; // nav shortcuts play the stunts fast
     smoothP += (scrollP - smoothP) * (1 - Math.exp(-Math.min(raw, 0.25) * follow));
     if (!document.hidden) { frame(t, dt, smoothP); governor(raw); }
-    requestAnimationFrame(loop);
   })();
 }
 window.__bike = {
