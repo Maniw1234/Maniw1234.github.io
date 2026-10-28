@@ -110,10 +110,42 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
           <i aria-hidden="true"></i><span>Sound off</span>
         </button>
+        <button class="daynight" id="daynight" type="button" aria-pressed="false" aria-label="Daytime" hidden>
+          <svg class="daynight__sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
+          <svg class="daynight__moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z"/></svg>
+        </button>
       </div>
       <span class="nav__glint" aria-hidden="true"></span>
     </div>
   </header>
+  <button class="garage-cta" id="garage-open" type="button" aria-controls="garage" aria-expanded="false" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5L12 4l9 6.5V20H3z"/><path d="M7 20v-6h10v6M7 17h10"/></svg>
+    <span>Garage</span>
+  </button>
+  <section class="garage" id="garage" aria-label="Garage" hidden>
+    <div class="garage__head">
+      <h2>Garage</h2>
+      <button class="garage__close" id="garage-close" type="button" aria-label="Close the garage">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="garage__hint"><span class="hint-mouse">Drag the bike to spin it.</span><span class="hint-touch">Swipe sideways to spin the bike.</span></p>
+    <p class="garage__label" id="paint-label">Paint</p>
+    <div class="swatches" role="radiogroup" aria-labelledby="paint-label">
+      <button type="button" role="radio" data-paint="stealth" aria-checked="true" style="--c:#141519"><span>Stealth black</span></button>
+      <button type="button" role="radio" data-paint="pearl" aria-checked="false" style="--c:#d9dce3"><span>Pearl white</span></button>
+      <button type="button" role="radio" data-paint="candy" aria-checked="false" style="--c:#9e1020"><span>Candy red</span></button>
+      <button type="button" role="radio" data-paint="lime" aria-checked="false" style="--c:#3f9e1c"><span>Lime green</span></button>
+      <button type="button" role="radio" data-paint="gemini" aria-checked="false" style="--c:#2f6fc0"><span>Gemini blue</span></button>
+      <button type="button" role="radio" data-paint="violet" aria-checked="false" style="--c:#5b3d9c"><span>Violet</span></button>
+    </div>
+    <p class="garage__label" id="time-label">Time of day</p>
+    <div class="seg" role="radiogroup" aria-labelledby="time-label">
+      <button type="button" role="radio" data-time="night" aria-checked="true">Night</button>
+      <button type="button" role="radio" data-time="day" aria-checked="false">Day</button>
+    </div>
+  </section>
+  <div class="progress" aria-hidden="true"><i class="progress__fill"></i><b class="progress__dot"></b></div>
   <a class="play-cta" href="play.html" aria-label="Play: ride the bike yourself">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>
     <span>Play</span>
