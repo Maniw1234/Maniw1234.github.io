@@ -5,7 +5,6 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { at, HALF } from "./course.js";
 
 const dummy = new THREE.Object3D(), tcol = new THREE.Color();
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // one InstancedMesh for a list of things; place(o, dummy, colour) sets each one up
 export function instanced(scene, geo, mat, list, place, colored = false) {

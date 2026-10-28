@@ -123,9 +123,9 @@ let stars = null;
 // Neon ground grid with a road
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE.ShaderMaterial({
   transparent: true, depthWrite: false,
-  uniforms: { uCam: { value: new THREE.Vector3() }, uDay: { value: 0 }, uFog: { value: new THREE.Color() } },
+  uniforms: { uCam: { value: new THREE.Vector3() }, uDay: { value: 0 }, uFog: { value: new THREE.Color() }, uOrigin: { value: new THREE.Vector2() }, uReveal: { value: 1e4 }, uFront: { value: 0 } },
   vertexShader: "varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
-  fragmentShader: `varying vec3 vW; uniform vec3 uCam; uniform float uDay; uniform vec3 uFog;
+  fragmentShader: `varying vec3 vW; uniform vec3 uCam; uniform float uDay; uniform vec3 uFog; uniform vec2 uOrigin; uniform float uReveal, uFront;
     float line(float v, float w){ float d = abs(fract(v - 0.5) - 0.5) / fwidth(v); return 1. - min(d / w, 1.); }
     void main(){
       vec2 p = vW.xz;
@@ -137,7 +137,11 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
       vec3 gc = mix(vec3(0.28,0.59,0.89), mix(vec3(0.57,0.47,0.78), vec3(0.79,0.40,0.45), clamp(t*2.-1.,0.,1.)), clamp(t*2.,0.,1.));
       vec3 c = gc * g * 0.55 + gc * edge * 1.8 + vec3(0.9) * dash * 0.5 + vec3(0.02,0.025,0.05) * road;
       float fade = exp(-distance(vW, uCam) * 0.03);
-      vec4 night = vec4(c * fade, (g * 0.6 + edge + dash + road * 0.6) * fade);
+      // the way in: the grid powers up in a ring racing out from the bike when the engine fires
+      float dr = distance(p, uOrigin), on = smoothstep(uReveal, uReveal - 4., dr);
+      float front = exp(-abs(dr - uReveal) * 0.9) * step(dr, uReveal + 6.) * uFront;
+      c = c * on + gc * (g * 2.6 + edge * 1.6 + 0.1) * front;
+      vec4 night = vec4(c * fade, ((g * 0.6 + edge + dash + road * 0.6) * on + front * (g * 2. + 0.2)) * fade);
       // day: pale concrete plaza with faint expansion joints, a grey asphalt road, white lines; hazes into the sky
       float n = fract(sin(dot(floor(p * 3.), vec2(12.9898, 78.233))) * 43758.5453);
       vec3 concrete = vec3(0.30, 0.295, 0.28) * (0.94 + 0.06 * n) * (1. - 0.18 * max(line(p.x / 4., 1.), line(p.y / 4., 1.)));
@@ -159,7 +163,7 @@ const shadowBlob = (() => {
 })();
 
 // Roadside light posts
-let lampCaps = null;
+let lampCaps = null, lampBase = null, lampsLit = true; // the way in lights the lamps one by one
 {
   const N = 2 * 34;
   const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.04, 2.2, 8).translate(0, 1.1, 0), new THREE.MeshStandardMaterial({ color: 0x1b1f2e, metalness: 0.8, roughness: 0.3 }), N);
@@ -172,6 +176,7 @@ let lampCaps = null;
     d.position.y = 2.25; d.updateMatrix(); caps.setMatrixAt(i, d.matrix); caps.setColorAt(i, gem((x + 24) / 100, tc).multiplyScalar(2.2));
   }
   scene.add(posts, caps); lampCaps = caps;
+  lampBase = caps.instanceColor.array.slice();
 }
 
 // Ramp and landing pad
@@ -185,6 +190,11 @@ let lampCaps = null;
 }
 const pad = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.55, 64), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xca6673).multiplyScalar(2), transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
 pad.rotation.x = -Math.PI / 2; pad.position.set(46, 0.01, 0); scene.add(pad);
+// the way in: two shock rings roll out across the ground when the engine fires
+const shocks = [0x6aa8ff, 0xe07a8a].map((c) => {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.92, 1, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(2.2), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  m.rotation.x = -Math.PI / 2; m.position.y = 0.02; m.visible = false; scene.add(m); return m;
+});
 
 // Sparkle monument in the drift circle
 const sparkleGeo = (() => {
@@ -409,24 +419,36 @@ function ride(p, t) {
    loops at four engine speeds. Like a racing game, the revs pick the two nearest loops, blend them and
    re-pitch them to match, so the same engine idles, blips and climbs. The revs rise fast and fall back slower,
    the way a real throttle does, and the tone opens up under load. Each loop file has 0.15 s of its own wrap as
-   padding either side, so it loops cleanly whatever start delay the decoder adds. Nothing downloads until
-   sound is turned on. */
+   padding either side, so it loops cleanly whatever start delay the decoder adds. Sound is on by default:
+   the loops download with the page and the engine is heard from the first click, tap or key (browsers allow
+   no sound before that), normally the loading screen's start button. Turning it off is remembered. */
 const AUDIO = "assets/audio/engine-";
 const ENGINE = [["idle", 1230, 0.75], ["mid", 5340, 0.95], ["high", 8900, 0.65], ["top", 12300, 0.9]]; // loop, rpm it was recorded at (inline four: 30 x firing Hz), loop length
-const snd = { ctx: null, on: false, layers: [], rpm: 1230, load: 0, last: 0 };
+const snd = { ctx: null, on: false, want: true, layers: [], rpm: 1230, load: 0, last: 0, files: null };
+try { snd.want = localStorage.getItem("bike-sound") !== "off"; } catch (e) {}
+let ignition = -1; // when the loading screen's start button was pressed (the needle sweep revs the engine)
+const fetchLoops = () => snd.files || (snd.files = Promise.all(ENGINE.map(([n]) => fetch(AUDIO + n + ".mp3").then((r) => r.arrayBuffer()))));
 function initAudio() {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)(); snd.ctx = ctx;
+  const Ctx = window.AudioContext || window.webkitAudioContext; if (!Ctx) return;
+  const ctx = new Ctx(); snd.ctx = ctx;
   const master = ctx.createGain(); master.gain.value = 0; snd.master = master;
   const tone = ctx.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 2000; tone.Q.value = 0.5; snd.tone = tone;
   tone.connect(master).connect(ctx.destination);
-  snd.ready = Promise.all(ENGINE.map(([n, , len]) => fetch(AUDIO + n + ".mp3").then((r) => r.arrayBuffer())
-    .then((a) => new Promise((ok, no) => ctx.decodeAudioData(a, ok, no))).then((buf) => {
+  snd.ready = fetchLoops().then((files) => Promise.all(files.map((a, k) => new Promise((ok, no) => ctx.decodeAudioData(a.slice(0), ok, no)).then((buf) => {
+      const len = ENGINE[k][2];
       const src = ctx.createBufferSource(), g = ctx.createGain();
       src.buffer = buf; src.loop = true; src.loopStart = 0.15; src.loopEnd = 0.15 + len;
       g.gain.value = 0; src.connect(g).connect(tone); src.start(0, 0.15);
       return { src, g };
-    }))).then((l) => { snd.layers = l; }).catch(() => {});
+    })))).then((l) => { snd.layers = l; }).catch(() => {});
 }
+function setSound(on) {
+  snd.want = on; try { localStorage.setItem("bike-sound", on ? "on" : "off"); } catch (e) {}
+  if (on) { if (!snd.ctx) initAudio(); if (!snd.ctx) return; snd.on = true; snd.ctx.resume(); }
+  else if (snd.on) { snd.on = false; snd.master.gain.setTargetAtTime(0, snd.ctx.currentTime, 0.1); }
+  showSound();
+}
+function showSound() { if (!soundBtn) return; soundBtn.setAttribute("aria-pressed", String(snd.want)); soundBtn.querySelector("span").textContent = snd.want ? "Sound on" : "Sound off"; }
 function audioTick(S) {
   if (!snd.on || !snd.layers.length) return;
   const now = snd.ctx.currentTime, dt = clamp(now - snd.last, 0, 0.5); snd.last = now;
@@ -446,16 +468,14 @@ function audioTick(S) {
 }
 const soundBtn = document.getElementById("sound");
 if (soundBtn) {
-  soundBtn.hidden = false;
-  soundBtn.addEventListener("click", () => {
-    if (!snd.ctx) initAudio();
-    snd.on = !snd.on; snd.ctx.resume();
-    if (!snd.on) snd.master.gain.setTargetAtTime(0, snd.ctx.currentTime, 0.1);
-    soundBtn.setAttribute("aria-pressed", String(snd.on));
-    soundBtn.querySelector("span").textContent = snd.on ? "Sound on" : "Sound off";
-  });
+  soundBtn.hidden = false; showSound();
+  soundBtn.addEventListener("click", () => setSound(!snd.want));
+  // the first real click, tap or key anywhere lets the engine be heard (the sound button's own click decides for itself)
+  const wake = (e) => { if (!snd.want || snd.on || (e.target && e.target.closest && e.target.closest("#sound"))) return; setSound(true); };
+  ["pointerdown", "keydown", "touchend"].forEach((ev) => addEventListener(ev, wake, { capture: true, passive: true }));
   document.addEventListener("visibilitychange", () => { if (!snd.ctx) return; if (document.hidden) snd.ctx.suspend(); else if (snd.on) snd.ctx.resume(); });
 }
+addEventListener("ignite", (e) => { ignition = performance.now(); if (e.detail && e.detail.heard && snd.want) setSound(true); });
 
 /* ---------------- scroll → progress: parked spots at the hero, about, projects and skills tops and the page bottom ---------------- */
 const stopEls = ["hero", "about", "projects", "skills"].map((id) => document.getElementById(id)).filter(Boolean);
@@ -598,6 +618,8 @@ function frame(t, dt, p) {
     spawnSparks(tip, 90, dir, 1.4, 7, true); spawnSmoke(tip, 6);
   }
   S.rpm += burst * 7500; S.throttle = Math.max(S.throttle, burst);
+  const sw = ignition >= 0 ? (nowMs - ignition) / 1000 : -1; // the start button's needle sweep: redline and back
+  if (sw >= 0 && sw < 1) { const k = sw < 0.42 ? 1 - (1 - sw / 0.42) ** 3 : Math.max(0, 1 - (sw - 0.42) / 0.5); S.rpm = Math.max(S.rpm, 1230 + 10500 * k); S.throttle = Math.max(S.throttle, k); }
   if (wasAir && !S.air) { shake = 0.35; spawnSparks(tmpV.copy(S.pos).setY(0.05), 140, new THREE.Vector3(-1, 0.6, 0), 1.6, 9); spawnSmoke(S.pos, 10); flash = 0.18; }
   wasAir = S.air; wasRest = S.rest; lastSeg = S.seg;
 
@@ -606,6 +628,24 @@ function frame(t, dt, p) {
   bike.rotation.set(S.roll, S.yaw, S.pitch);
   body.position.y = (1 - S.speed) * 0.006 * Math.sin(t * 90) + S.rpm / 12000 * 0.004 * Math.sin(t * 140);
   const roll = (S.speed * 26 * (rev < -0.05 && S.rest ? -1 : 1) + 2) * dt; B.wheels[0].rotation.z -= roll; B.wheels[1].rotation.z -= roll * (S.smoke ? 2.2 : 1);
+
+  // the way in: grid power-up ring, shock rings and the street lamps popping on as the ring reaches them
+  const fu = intro.pending && is >= FIRE_S ? is - FIRE_S : intro.pending ? -1 : 99, reach = fu < 0 ? 0 : fu * 36;
+  ground.material.uniforms.uOrigin.value.set(S.pos.x, S.pos.z);
+  ground.material.uniforms.uReveal.value = fu >= 90 ? 1e4 : reach; ground.material.uniforms.uFront.value = fu < 0 || fu >= 90 ? 0 : Math.exp(-fu * 0.5);
+  shocks.forEach((m, k) => {
+    const u = fu - k * 0.14; m.visible = u > 0 && u < 1.8;
+    if (m.visible) { m.position.x = S.pos.x; m.position.z = S.pos.z; m.scale.setScalar(0.6 + u * (16 - k * 4)); m.material.opacity = 0.9 * Math.exp(-u * 2.2) * (1 - u / 1.8); }
+  });
+  if (lampCaps && (fu < 90 || !lampsLit)) {
+    const col = lampCaps.instanceColor.array, mt = new THREE.Matrix4(), lp = new THREE.Vector3();
+    for (let i = 0; i < lampCaps.count; i++) {
+      lampCaps.getMatrixAt(i, mt); lp.setFromMatrixPosition(mt);
+      const d = Math.hypot(lp.x - S.pos.x, lp.z - S.pos.z), k = fu >= 90 ? 1 : clamp((reach - d) / 1.5, 0, 1) * (1 + 1.6 * Math.exp(-Math.max(0, reach - d) * 0.7));
+      for (let j = 0; j < 3; j++) col[i * 3 + j] = lampBase[i * 3 + j] * k;
+    }
+    lampCaps.instanceColor.needsUpdate = true; lampsLit = fu >= 90;
+  }
 
   // lights
   const lamp = intro.pending ? flick(is) : ignite;
@@ -694,7 +734,7 @@ function frame(t, dt, p) {
   // post
   afterimage.uniforms.damp.value = 0.55 * smooth(0.55, 1, S.speed) + (S.seg === "C" ? 0.25 : 0);
   fx.uniforms.uAb.value = REDUCED ? 0 : 0.004 + S.speed * 0.012 + shake * 0.05 + burst * 0.02;
-  bloom.strength = 0.7 + S.boost * 0.2 + burst * 1.1;
+  bloom.strength = 0.7 + S.boost * 0.2 + burst * 0.8;
   extra.day += (extra.dayWant - extra.day) * (1 - Math.exp(-rdt * 2.2));
   const D = extra.day;
   sky.material.uniforms.uDay.value = D; if (stars) stars.material.opacity = 1 - D;
@@ -790,7 +830,7 @@ function fitModel(m, cfg) {
 }
 // loading screen (inline script in index.html): real download progress, then done once the bike is on screen
 function loading(k) { if (window.__load) window.__load.set(k); }
-function ready() { requestAnimationFrame(() => requestAnimationFrame(() => window.__load && window.__load.done())); }
+function ready() { if (snd.want) fetchLoops(); requestAnimationFrame(() => requestAnimationFrame(() => window.__load && window.__load.done())); }
 loading(0.1);
 if (canvas.dataset.model) loadBikeModel(canvas.dataset.model); else ready();
 

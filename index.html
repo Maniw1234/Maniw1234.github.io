@@ -41,9 +41,9 @@
   <script defer src="assets/js/ui.js"></script>
 </head>
 <body>
-  <!-- Loading screen: a rev counter that climbs with the download, then the bike fires up and the page appears -->
-  <div class="loader" id="loader" aria-hidden="true">
-    <div class="loader__dial">
+  <!-- Loading screen: a rev counter that climbs with the download; then a start button fires the engine (needle sweep, sound) and the page appears -->
+  <div class="loader" id="loader">
+    <div class="loader__dial" aria-hidden="true">
       <svg viewBox="0 0 200 200">
         <defs><linearGradient id="loader-grad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#4796e3"/><stop offset=".6" stop-color="#9177c7"/><stop offset="1" stop-color="#ca6673"/></linearGradient></defs>
         <path class="loader__track" d="M43.43 156.57A80 80 0 1 1 156.57 156.57"/>
@@ -54,30 +54,51 @@
       </svg>
       <p class="loader__n"><span id="loader-n">0</span><small>x1000 rpm</small></p>
     </div>
-    <p class="loader__label" id="loader-label">Starting the engine</p>
+    <p class="loader__label" id="loader-label" aria-hidden="true">Starting the engine</p>
+    <button class="loader__start" id="loader-start" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v8M7.05 6.3a8 8 0 1 0 9.9 0"/></svg><span>Start engine</span></button>
+    <p class="loader__hint" id="loader-hint" hidden>Press <kbd>Enter</kbd> or tap · sound on</p>
   </div>
   <script>
     // runs before anything else so the dial moves from the first moment; main.js reports the real download progress
     (function () {
       var el = document.getElementById("loader"), fill = document.getElementById("loader-fill"), needle = document.getElementById("loader-needle"), n = document.getElementById("loader-n");
-      var want = 0.04, shown = 0, finished = false, timer = 0;
+      var want = 0.04, shown = 0, finished = false, timer = 0, sweep = -1;
       document.documentElement.classList.add("is-loading");
       (function tick() {
-        shown += (want - shown) * 0.12;
-        var idle = finished ? 0 : Math.sin(Date.now() / 90) * 0.006; // the needle shivers like an idling engine
+        if (sweep >= 0) { var s = (Date.now() - sweep) / 1000; want = shown = s < 0.42 ? 1 - Math.pow(1 - s / 0.42, 3) : Math.max(0.09, 1 - (s - 0.42) / 0.5); } // up to the redline, back to idle
+        else shown += (want - shown) * (finished ? 0.2 : 0.12);
+        var idle = finished && sweep < 0 ? 0 : Math.sin(Date.now() / 90) * 0.006 * (sweep >= 0 ? 2 : 1); // the needle shivers like an idling engine
         var k = Math.max(0, Math.min(1, shown + idle));
         fill.style.strokeDashoffset = String(377 * (1 - k));
         needle.style.transform = "rotate(" + (-135 + 270 * k) + "deg)";
         n.textContent = String(Math.round(k * 14));
         if (!el.hidden) requestAnimationFrame(tick);
       })();
+      // ready: the needle drops to zero and a start button appears. Pressing it (a real click or key, so the
+      // browser lets the engine be heard) sweeps the needle to the redline and back like a bike's self-test, then
+      // the dial flies past and the bike fires up. Nobody pressing within a few seconds starts it silently.
+      var root = document.documentElement, btn = document.getElementById("loader-start"), hint = document.getElementById("loader-hint"), auto = 0;
+      function go(heard) {
+        if (sweep >= 0) return; sweep = Date.now(); clearTimeout(auto); removeEventListener("keydown", key);
+        window.dispatchEvent(new CustomEvent("ignite", { detail: { heard: heard } }));
+        root.classList.add("is-igniting");
+        setTimeout(function () { root.classList.remove("is-loading", "is-ready", "is-igniting"); root.classList.add("is-loaded"); }, 1150);
+        setTimeout(function () { if (document.activeElement === btn) btn.blur(); el.hidden = true; }, 2100); // Tab then starts at the top of the page
+      }
+      function key(e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(true); } }
+      btn.addEventListener("click", function () { go(true); });
+      el.addEventListener("pointerdown", function (e) { if (root.classList.contains("is-ready") && e.target !== btn && !btn.contains(e.target)) go(true); });
       window.__load = {
         set: function (k) { if (!finished) want = Math.max(want, Math.min(0.92, k)); },
+        sweep: function () { return sweep < 0 ? -1 : (Date.now() - sweep) / 1000; },
         done: function () {
-          if (finished) return; finished = true; want = 1; clearTimeout(timer);
-          document.getElementById("loader-label").textContent = "Ready";
-          setTimeout(function () { document.documentElement.classList.remove("is-loading"); document.documentElement.classList.add("is-loaded"); }, 650);
-          setTimeout(function () { el.hidden = true; }, 1500);
+          if (finished) return; finished = true; want = 0; clearTimeout(timer);
+          document.getElementById("loader-label").hidden = true;
+          btn.hidden = hint.hidden = false; root.classList.add("is-ready");
+          try { btn.focus({ preventScroll: true }); } catch (e) {}
+          addEventListener("keydown", key);
+          addEventListener("wheel", function () { go(false); }, { once: true, passive: true });
+          auto = setTimeout(function () { go(false); }, 6000);
         }
       };
       timer = setTimeout(window.__load.done, 15000); // never hold the page longer than this

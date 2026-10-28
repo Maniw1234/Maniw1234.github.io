@@ -3,7 +3,6 @@
 // (cos yaw, -sin yaw). "s" is metres along the road, "lat" metres to the left of its centre line.
 
 export const HALF = 7; // half the road width (four lanes)
-export const LANES = [-5.25, -1.75, 1.75, 5.25];
 
 // Ten zones, each a complete setting. pieces: [length in metres, how far it turns in degrees (+ = left)]
 const ZONE_DEF = [
@@ -104,7 +103,7 @@ export function at(C, s, lat = 0) {
 const inRange = (list, s) => list.some(([a, b]) => s > a && s < b);
 
 // nearest piece of road, searched around the last one so the route can't be skipped by cutting across
-export function locate(C, px, pz, hint, wide) {
+function locate(C, px, pz, hint, wide) {
   let best = hint, bd = Infinity;
   const r = wide ? C.N : 80, a = Math.max(0, hint - r), b = Math.min(C.N - 1, hint + r), st = wide ? 4 : 1;
   for (let i = a; i <= b; i += st) { const d = (C.x[i] - px) ** 2 + (C.z[i] - pz) ** 2; if (d < bd) { bd = d; best = i; } }
