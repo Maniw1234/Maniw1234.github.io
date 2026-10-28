@@ -63,7 +63,7 @@ function paintGradient(geo, dir) {
   });
   scene.environment = pmrem.fromScene(env, 0.03).texture;
 }
-scene.add(new THREE.HemisphereLight(0x8fb0ff, 0x120a18, 0.4));
+const hemi = new THREE.HemisphereLight(0x8fb0ff, 0x120a18, 0.4); scene.add(hemi);
 const moon = new THREE.DirectionalLight(0xc8d4ff, 1.4); moon.position.set(-6, 10, 8); scene.add(moon);
 const rimBlue = new THREE.DirectionalLight(0x4796e3, 1.6); rimBlue.position.set(-8, 3, -6); scene.add(rimBlue);
 const rimRose = new THREE.DirectionalLight(0xca6673, 0.7); rimRose.position.set(8, 2, -5); scene.add(rimRose);
@@ -71,18 +71,24 @@ const rimRose = new THREE.DirectionalLight(0xca6673, 0.7); rimRose.position.set(
 const keyLight = new THREE.DirectionalLight(0xf2f4ff, 1.7); scene.add(keyLight, keyLight.target);
 
 const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24), new THREE.ShaderMaterial({
-  side: THREE.BackSide, depthWrite: false, fog: false,
+  side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uDay: { value: 0 } },
   vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }",
-  fragmentShader: `varying vec3 vP;
+  fragmentShader: `varying vec3 vP; uniform float uDay;
     void main(){
+      // day: a clear blue sky that warms to peach at the horizon, with the sun low on the right
+      float h = clamp(vP.y, 0., 1.);
+      vec3 d = mix(vec3(0.78,0.84,0.95), vec3(0.2,0.45,0.88), pow(h, 0.5));
+      vec3 sunD = normalize(vec3(0.55,0.18,-0.8));
+      d += vec3(1.0,0.85,0.6) * (pow(max(0., dot(vP, sunD)), 900.) * 3. + pow(max(0., dot(vP, sunD)), 12.) * 0.35);
       vec3 c = vec3(0.012,0.014,0.03);
       c += vec3(0.10,0.25,0.55) * pow(max(0., 1. - abs(vP.y - 0.05) * 4.), 3.) * 0.35;
       c += vec3(0.45,0.28,0.65) * smoothstep(0.75, 1., dot(vP, normalize(vec3(0.6,0.25,-0.7)))) * 0.5;
       c += vec3(0.60,0.22,0.30) * smoothstep(0.8, 1., dot(vP, normalize(vec3(-0.7,0.15,-0.6)))) * 0.35;
-      gl_FragColor = vec4(c * 0.45, 1.);
+      gl_FragColor = vec4(mix(c * 0.45, d, uDay), 1.);
     }`
 }));
 scene.add(sky);
+let stars = null;
 {
   const n = LITE ? 1200 : 2500, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), tc = new THREE.Color();
   for (let i = 0; i < n; i++) {
@@ -91,7 +97,8 @@ scene.add(sky);
     gem(rnd(), tc).lerp(new THREE.Color(1, 1, 1), 0.5).multiplyScalar(0.5 + rnd() * 0.8).toArray(col, i * 3);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 1.4, map: GLOW, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })));
+  stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.4, map: GLOW, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+  scene.add(stars);
 }
 
 // Neon ground grid with a road
@@ -115,6 +122,9 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
     }`
 }));
 ground.rotation.x = -Math.PI / 2; scene.add(ground);
+// daytime: real asphalt under the neon grid (at night the black sky shows through and does the job)
+const asphalt = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ color: 0x2b2e36, roughness: 0.9, metalness: 0, transparent: true, opacity: 0 }));
+asphalt.rotation.x = -Math.PI / 2; asphalt.position.y = -0.005; asphalt.renderOrder = -1; asphalt.visible = false; scene.add(asphalt);
 
 // Roadside light posts
 {
@@ -444,7 +454,40 @@ addEventListener("pointermove", (e) => { pointer.x = e.clientX / innerWidth * 2 
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 let shake = 0, lastSeg = null, wasAir = false, wasRest = null, ignite = 0, idleW = 0, orbitA = 0, firstFrame = true, blip = 0, nextBlip = 1.5, flash = 0;
 const flashEl = document.getElementById("flash");
-let lastState = null, lastFrameMs = performance.now(), viewShift = 0, modelReady = false, modelHolder = null;
+
+/* ---------------- the way in ----------------
+   While the rev dial loads, the scene waits in the dark with the camera right at the bike's nose. When the
+   page is ready: the headlight flickers on, the engine fires (flames, sparks, a jolt), and the camera swoops
+   round the bike and up into its parked framing as the words fly in from the depth. Only at the top of the
+   page, never with reduced motion. */
+const INTRO_MS = 3300, FIRE_S = 0.95;
+const intro = { pending: !REDUCED && !!document.getElementById("loader") && scrollY < 40, t0: -1, fired: false };
+if (intro.pending) {
+  const html = document.documentElement;
+  html.classList.add("intro");
+  const go = () => {
+    if (intro.t0 >= 0 || !html.classList.contains("is-loaded")) return false;
+    intro.t0 = performance.now();
+    setTimeout(() => { html.classList.add("intro-out"); html.classList.remove("intro"); }, 2300);
+    setTimeout(() => html.classList.remove("intro-out"), 4600);
+    return true;
+  };
+  if (!go()) { const mo = new MutationObserver(() => { if (go()) mo.disconnect(); }); mo.observe(html, { attributes: true, attributeFilter: ["class"] }); }
+  addEventListener("scroll", () => { if (scrollY > 40 && intro.pending) { intro.pending = false; html.classList.remove("intro"); } }, { passive: true }); // scrolled away: skip it
+}
+/* ---------------- extras: day and night, the garage (paint + drag to spin), and the "vroom" wheelie ---------------- */
+const NIGHT_BG = new THREE.Color(0x04050a), DAY_BG = new THREE.Color(0x6f9fe0), NIGHT_FOG = new THREE.Color(0x05060c), DAY_FOG = new THREE.Color(0xb8c9e8);
+const MOON_C = new THREE.Color(0xc8d4ff), SUN_C = new THREE.Color(0xffe2c0);
+const extra = { day: 0, dayWant: 0, garage: false, spin: 0, wheelie: -1, paint: null };
+const PAINTS = { stealth: 0x141519, pearl: 0xd9dce3, candy: 0x9e1020, lime: 0x3f9e1c, gemini: 0x2f6fc0, violet: 0x5b3d9c };
+function setPaint(name) {
+  const hex = PAINTS[name]; if (hex == null) return false;
+  extra.paint = name; if (paintMat) paintMat.color.setHex(hex);
+  return true;
+}
+// headlight flicker: off, a stutter, then on
+const flick = (s) => s < 0.42 ? 0 : s < 0.5 ? 1 : s < 0.58 ? 0.12 : s < 0.64 ? 0.9 : s < 0.7 ? 0.25 : smooth(0.7, 0.85, s);
+let paintMat = null, lastState = null, lastFrameMs = performance.now(), viewShift = 0, modelReady = false, modelHolder = null;
 
 // Riding back up the page: instead of reversing, the bike swings round to face the way it's going, rides the
 // route forward-facing (flips and wheelies still read right, since the spin and the heading both reverse),
@@ -475,6 +518,9 @@ function frame(t, dt, p) {
 
   // Rev: rolls the parked bike back and forth with throttle, flames and smoke
   const nowMs = performance.now(), rdt = Math.min((nowMs - lastFrameMs) / 1000, 0.25); lastFrameMs = nowMs; // wall-clock, so rev settles on time on slow devices too
+  const is = intro.pending ? (intro.hold != null ? intro.hold : intro.t0 < 0 ? 0 : (nowMs - intro.t0) / 1000) : 99; // seconds into the way in
+  if (intro.pending && is * 1000 >= INTRO_MS) intro.pending = false;
+  const burst = intro.fired || is >= FIRE_S ? Math.exp(-Math.max(0, is - FIRE_S) * 2.2) * (is < 90 ? 1 : 0) : 0;
   if (nowMs - lastRev > 250) revTarget *= Math.exp(-rdt * 5);
   rev += ((S.rest ? revTarget : 0) - rev) * (1 - Math.exp(-rdt * 9));
   if (Math.abs(rev) > 0.01) {
@@ -486,11 +532,25 @@ function frame(t, dt, p) {
     if (a > 0.8) S.smoke = 1;
   }
 
+  // the "vroom" wheelie (parked only): throttle up, the front lifts and the bike rolls forward on its back wheel, then sets down
+  if (extra.wheelie >= 0) {
+    extra.wheelie += rdt;
+    const w = extra.wheelie, th = 0.62 * smooth(0.15, 0.7, w) * (1 - smooth(1.9, 2.5, w)), R = 0.72;
+    if (!S.rest || w > 2.8) extra.wheelie = -1;
+    else {
+      const fw = tmpV.set(Math.cos(S.yaw), 0, -Math.sin(S.yaw)), go = 1.4 * smooth(0.1, 1.9, w) * (1 - smooth(2.0, 2.8, w));
+      S.pos.addScaledVector(fw, go + R * (1 - Math.cos(th))); S.pos.y += R * Math.sin(th);
+      S.pitch += th; S.speed = Math.max(S.speed, 0.6 * (1 - smooth(1.9, 2.6, w)));
+      const g = 1 - smooth(1.6, 2.4, w); S.rpm = Math.max(S.rpm, 1250 + 9800 * g * smooth(0, 0.25, w)); S.throttle = Math.max(S.throttle, g); S.boost = Math.max(S.boost, g); if (w < 1.4) S.smoke = 1;
+      if (w > 2.15 && w - rdt <= 2.15) shake = 0.25; // front wheel touches down
+    }
+  }
+
   // Parked: the camera circles the bike like a showroom; the engine idles quietly with the odd blip
-  const idle = !REDUCED && S.rest && nowMs - lastScroll > 700 && nowMs - lastRev > 900 && Math.abs(rev) < 0.02;
+  const idle = extra.garage || (!REDUCED && S.rest && nowMs - lastScroll > 700 && nowMs - lastRev > 900 && Math.abs(rev) < 0.02);
   idleW += ((idle ? 1 : 0) - idleW) * (1 - Math.exp(-dt * (idle ? 0.9 : 4)));
   if (idleW < 0.01) orbitA = Math.atan2(camPos.x - S.pos.x, camPos.z - S.pos.z);
-  orbitA += dt * 0.32 * idleW;
+  orbitA += dt * (extra.garage ? 0.12 : 0.32) * idleW + extra.spin; extra.spin = 0; // in the garage the visitor's drag spins it
   if (idle && S.speed < 0.5) {
     nextBlip -= dt;
     if (nextBlip < 0) { blip = 0.6; nextBlip = 5 + rnd() * 4; }
@@ -499,6 +559,12 @@ function frame(t, dt, p) {
   S.rpm += blip * 6000 * idleW; S.throttle = Math.max(S.throttle, blip * idleW);
 
   // events
+  if (intro.pending && !intro.fired && is >= FIRE_S) {
+    intro.fired = true; shake = 0.32; flash = 0.22;
+    const tip = flames.getWorldPosition(new THREE.Vector3()), dir = tmpV2.copy(B.exhaustDir).applyQuaternion(body.getWorldQuaternion(new THREE.Quaternion()));
+    spawnSparks(tip, 90, dir, 1.4, 7, true); spawnSmoke(tip, 6);
+  }
+  S.rpm += burst * 7500; S.throttle = Math.max(S.throttle, burst);
   if (wasAir && !S.air) { shake = 0.35; spawnSparks(tmpV.copy(S.pos).setY(0.05), 140, new THREE.Vector3(-1, 0.6, 0), 1.6, 9); spawnSmoke(S.pos, 10); flash = 0.18; }
   wasAir = S.air; wasRest = S.rest; lastSeg = S.seg;
 
@@ -509,13 +575,13 @@ function frame(t, dt, p) {
   const roll = (S.speed * 26 * (rev < -0.05 && S.rest ? -1 : 1) + 2) * dt; B.wheels[0].rotation.z -= roll; B.wheels[1].rotation.z -= roll * (S.smoke ? 2.2 : 1);
 
   // lights
-  const lamp = ignite;
+  const lamp = intro.pending ? flick(is) : ignite;
   ledGlow.material.opacity = lamp * 0.6; beam.material.uniforms.uI.value = lamp; spot.intensity = lamp * 40;
   tailGlow.material.opacity = 0.5 + (S.rest ? 0.35 : 0) + 0.3 * clamp(rev, 0, 1);
 
   // flames: steady with boost, plus random crackle and blips
   const crackle = (S.throttle > 0.5 && rnd() < 0.08) ? 0.6 : 0;
-  const power = clamp(S.boost * 0.9 + crackle + blip * idleW * 1.2, 0, 1.4);
+  const power = clamp(S.boost * 0.9 + crackle + blip * idleW * 1.2 + burst * 1.4, 0, 1.4);
   flameLayers.forEach((m, i) => {
     m.material.uniforms.uT.value = t; m.material.uniforms.uP.value = power * (1.1 - i * 0.15);
     m.scale.set(1, 0.35 + power * (0.9 + 0.2 * Math.sin(t * 50 + i)), 1);
@@ -560,29 +626,49 @@ function frame(t, dt, p) {
   pad.material.opacity = 0.5 + 0.4 * Math.sin(t * 4);
 
   // camera: the ride's camera, blended into a slow orbit while idle
-  const orbitR = 6.2, orbitH = 1.5;
+  const orbitR = extra.garage ? 5.6 : 6.2, orbitH = extra.garage ? 1.1 : 1.5;
   tmpV.set(S.pos.x + Math.sin(orbitA) * orbitR, Math.max(0.6, S.pos.y + orbitH), S.pos.z + Math.cos(orbitA) * orbitR);
   const want = tmpV2.copy(S.cam).lerp(tmpV, idleW);
   const lookWant = new THREE.Vector3().copy(S.look).lerp(new THREE.Vector3(S.pos.x, S.pos.y + 0.7, S.pos.z), idleW);
   const fast = S.rest ? 4.2 : PORTRAIT && S.high > 0 ? 24 : 14; // phones: hug the bike round the drift
   camPos.lerp(want, firstFrame ? 1 : 1 - Math.exp(-rdt * fast));
   camLook.lerp(lookWant, firstFrame ? 1 : 1 - Math.exp(-rdt * (S.rest ? 6 : PORTRAIT && S.high > 0 ? 30 : 18)));
+  if (intro.pending) {
+    // start at the nose looking back at the headlight, hold through ignition, then swoop the long way round
+    const fw = tmpV.set(Math.cos(S.yaw), 0, -Math.sin(S.yaw)), side = new THREE.Vector3(-fw.z, 0, fw.x);
+    const o0 = fw.clone().multiplyScalar(2.9).addScaledVector(side, 0.9).setY(0.42), o1 = tmpV2.copy(want).sub(S.pos);
+    const a0 = Math.atan2(o0.x, o0.z), a1 = Math.atan2(o1.x, o1.z);
+    let da = wrapA(a1 - a0); if (Math.abs(da) < Math.PI * 0.85) da -= Math.sign(da || 1) * Math.PI * 2;
+    const u = easeIO(clamp((is - FIRE_S + 0.15) / 2.2, 0, 1)), a = a0 + da * u;
+    const r = THREE.MathUtils.lerp(Math.hypot(o0.x, o0.z), Math.hypot(o1.x, o1.z), u) * (1 + 0.25 * Math.sin(Math.PI * u));
+    camPos.set(S.pos.x + Math.sin(a) * r, S.pos.y + THREE.MathUtils.lerp(o0.y, o1.y, u) + Math.sin(Math.PI * u) * 1.3, S.pos.z + Math.cos(a) * r);
+    camPos.x += Math.sin(is * 1.3) * 0.04 * (1 - u); // a slow breath while it waits in the dark
+    const l0 = new THREE.Vector3().copy(S.pos).addScaledVector(fw, 1.0).setY(S.pos.y + 0.72);
+    camLook.copy(l0).lerp(lookWant, u);
+  }
   shake *= Math.exp(-dt * 5);
   camera.position.copy(camPos).add(tmpV.set(Math.sin(t * 73) * shake, Math.sin(t * 91) * shake, 0));
   camera.position.x += pointer.x * 0.15; camera.position.y += pointer.y * 0.1;
   camera.lookAt(camLook);
   keyLight.position.copy(camera.position).add(tmpV.set(-1.5, 3.5, 0)); keyLight.target.position.copy(bike.position);
   // phones: shift the picture down so the parked bike sits below the words, not behind them
-  const shiftWant = PORTRAIT ? (S.rest && p < LAST - 0.5 ? 0.26 : 0.08) : 0;
+  const shiftWant = extra.garage ? (PORTRAIT ? -0.14 : -0.06) : PORTRAIT ? (S.rest && p < LAST - 0.5 ? 0.26 : 0.08) : 0; // the garage panel sits below the bike
   viewShift += (shiftWant - viewShift) * (firstFrame ? 1 : 1 - Math.exp(-dt * 2.5));
-  if (viewShift > 0.001) camera.setViewOffset(innerWidth, innerHeight, 0, -viewShift * innerHeight, innerWidth, innerHeight);
+  if (Math.abs(viewShift) > 0.001) camera.setViewOffset(innerWidth, innerHeight, 0, -viewShift * innerHeight, innerWidth, innerHeight);
   else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   ground.material.uniforms.uCam.value.copy(camera.position);
 
   // post
   afterimage.uniforms.damp.value = 0.55 * smooth(0.55, 1, S.speed) + (S.seg === "C" ? 0.25 : 0);
-  fx.uniforms.uAb.value = REDUCED ? 0 : 0.004 + S.speed * 0.012 + shake * 0.05;
-  bloom.strength = 0.7 + S.boost * 0.2;
+  fx.uniforms.uAb.value = REDUCED ? 0 : 0.004 + S.speed * 0.012 + shake * 0.05 + burst * 0.02;
+  bloom.strength = 0.7 + S.boost * 0.2 + burst * 1.1;
+  extra.day += (extra.dayWant - extra.day) * (1 - Math.exp(-rdt * 2.2));
+  const D = extra.day;
+  sky.material.uniforms.uDay.value = D; if (stars) stars.material.opacity = 1 - D;
+  scene.background.copy(NIGHT_BG).lerp(DAY_BG, D); scene.fog.color.copy(NIGHT_FOG).lerp(DAY_FOG, D); scene.fog.density = 0.018 - 0.011 * D; asphalt.material.opacity = D; asphalt.visible = D > 0.01;
+  hemi.intensity = 0.4 + 0.9 * D; moon.intensity = 1.4 + 1.4 * D; moon.color.copy(MOON_C).lerp(SUN_C, D);
+  bloom.strength *= 1 - 0.55 * D; bloom.threshold = 0.55 + 0.35 * D;
+  renderer.toneMappingExposure = (1.05 - 0.12 * D) * (intro.pending ? 0.18 + 0.82 * smooth(0.4, FIRE_S + 0.5, is) : 1); // dark until the light and the engine come on
   flash *= 0.85; if (flashEl) flashEl.style.opacity = flash.toFixed(3);
 
   audioTick(S);
@@ -647,7 +733,8 @@ function fitModel(m, cfg) {
     return pivot;
   });
   if (axles[0] && axles[1]) B.wheels = axles;
-  modelReady = true; modelHolder = holder;
+  modelReady = true; modelHolder = holder; paintMat = made.paint || null;
+  if (extra.paint) setPaint(extra.paint);
   // swap: hide the coded bodywork (lights, flames and anchors stay)
   B.bike.children.forEach((ch) => { if (ch.isGroup && ch !== flames) ch.visible = false; });
   body.add(holder);
@@ -685,9 +772,10 @@ function governor(raw) {
 /* ---------------- drive ---------------- */
 document.documentElement.classList.add("has-gl");
 const clock = new THREE.Clock();
+let redraw = () => {};
 if (REDUCED) {
   const still = () => { firstFrame = true; ignite = 1; frame(1.2, 1 / 60, 0); };
-  still(); addEventListener("resize", still);
+  still(); addEventListener("resize", still); redraw = still;
 } else {
   (function loop() {
     const raw = clock.getDelta(), dt = Math.min(raw, 0.05), t = clock.elapsedTime;
@@ -698,4 +786,14 @@ if (REDUCED) {
     requestAnimationFrame(loop);
   })();
 }
-window.__ride = { audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, rpm: Math.round(snd.rpm), load: +snd.load.toFixed(2), layers: Object.fromEntries(snd.layers.map((l, k) => [ENGINE[k][0], [+(l.want || 0).toFixed(3), +l.src.playbackRate.value.toFixed(2)]])) }), get green() { let n = 0; modelHolder && modelHolder.traverse((o) => { if (o.isMesh && o.material.color) { const h = {}; o.material.color.getHSL(h); if (h.s > 0.3 && h.l > 0.08) n++; } }); return modelHolder ? n : -1; }, frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev, yaw: lastState.yaw, back: !!back.on }, perf: () => ({ level: perf.level, ratio: renderer.getPixelRatio() }) };
+window.__bike = {
+  paints: Object.keys(PAINTS),
+  paint: (name) => { const ok = setPaint(name); if (REDUCED) redraw(); return ok; },
+  day: (on) => { extra.dayWant = on ? 1 : 0; if (REDUCED) { extra.day = extra.dayWant; redraw(); } },
+  garage: (on) => { extra.garage = !!on; },
+  spin: (rad) => { extra.spin += rad; },
+  wheelie: () => { if (extra.wheelie < 0 && lastState && lastState.rest) { extra.wheelie = 0; return true; } return false; },
+  state: () => ({ orbit: +orbitA.toFixed(2), cam: camera.position.toArray().map((v) => +v.toFixed(2)), day: +extra.day.toFixed(2), garage: extra.garage, wheelie: extra.wheelie, paint: extra.paint, color: paintMat && paintMat.color.getHexString(), pitch: lastState && +lastState.pitch.toFixed(2) })
+};
+window.dispatchEvent(new Event("bike-ready"));
+window.__ride = { intro: () => ({ pending: intro.pending, t0: intro.t0, fired: intro.fired }), holdIntro: (sec) => { intro.pending = sec != null; intro.hold = sec; intro.fired = sec != null && sec > FIRE_S + 0.05; }, audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, rpm: Math.round(snd.rpm), load: +snd.load.toFixed(2), layers: Object.fromEntries(snd.layers.map((l, k) => [ENGINE[k][0], [+(l.want || 0).toFixed(3), +l.src.playbackRate.value.toFixed(2)]])) }), get green() { let n = 0; modelHolder && modelHolder.traverse((o) => { if (o.isMesh && o.material.color) { const h = {}; o.material.color.getHSL(h); if (h.s > 0.3 && h.l > 0.08) n++; } }); return modelHolder ? n : -1; }, frame, setP: (p) => { scrollP = smoothP = p; }, idle: () => { lastScroll = -1e9; }, state: () => lastState && { scr: (() => { const v = lastState.pos.clone().setY(0.6).project(camera); return [Math.round((v.x + 1) / 2 * innerWidth), Math.round((1 - v.y) / 2 * innerHeight)]; })(), model: modelReady, wheels: B.wheels[0].parent && B.wheels[0].parent.type, p: smoothP, sp: scrollP, marks, y: lastState.pos.y, x: lastState.pos.x, rest: lastState.rest, air: lastState.air, rev, yaw: lastState.yaw, back: !!back.on }, perf: () => ({ level: perf.level, ratio: renderer.getPixelRatio() }) };

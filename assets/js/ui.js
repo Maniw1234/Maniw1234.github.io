@@ -74,7 +74,7 @@
   else {
     var waitIntro = function () {
       if (!root.classList.contains("is-loaded")) return false;
-      setTimeout(endIntro, REDUCED ? 0 : 1600); return true;
+      setTimeout(endIntro, REDUCED ? 0 : root.classList.contains("has-gl") ? 3300 : 1600); return true; // after the 3D way in, when there is one
     };
     if (!waitIntro()) {
       var mo = new MutationObserver(function () { if (waitIntro()) mo.disconnect(); });
@@ -101,7 +101,7 @@
   var STOP_IDS = ["hero", "about", "projects", "skills"];
   var step = { busy: false, until: 0, sum: 0, dir: true, last: 0, hold: false, floor: 0 }, RIDE_AT = 140;
   function rev(amount) { if (typeof window.__rideRev === "function") window.__rideRev(amount); }
-  function stepping() { return root.classList.contains("has-gl") && !REDUCED && !(view && view.open); }
+  function stepping() { return root.classList.contains("has-gl") && !REDUCED && !(view && view.open) && !root.classList.contains("in-garage"); }
   function stops() {
     var y0 = window.scrollY, list = STOP_IDS.map(function (id) {
       var s = document.getElementById(id); return s ? Math.round(s.getBoundingClientRect().top + y0) : 0;
@@ -450,4 +450,91 @@
     var h = location.hash.slice(1);
     for (var i = 0; i < projects.length; i++) if (projects[i]._id === h) { document.getElementById("projects").scrollIntoView(); openProject(i); break; }
   });
+
+  /* ---------- the glowing line down the side: fills as you go down, with a dot for each stop ---------- */
+  var prog = document.querySelector(".progress");
+  if (prog) {
+    var ticks = [], queued = false;
+    var placeTicks = function () {
+      var s = stops(), max = s[s.length - 1] || 1;
+      ticks.forEach(function (t) { t.remove(); });
+      ticks = s.map(function (y) { var t = document.createElement("i"); t.className = "progress__tick"; t.style.top = (y / max * 100) + "%"; t._k = y / max; prog.appendChild(t); return t; });
+      paint();
+    };
+    var paint = function () {
+      queued = false;
+      var max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight), k = Math.min(1, Math.max(0, window.scrollY / max));
+      prog.style.setProperty("--k", k.toFixed(4));
+      ticks.forEach(function (t) { t.classList.toggle("is-past", t._k <= k + 0.002); });
+    };
+    window.addEventListener("scroll", function () { if (!queued) { queued = true; requestAnimationFrame(paint); } }, { passive: true });
+    window.addEventListener("resize", placeTicks);
+    window.addEventListener("load", placeTicks);
+    if ("ResizeObserver" in window) new ResizeObserver(function () { placeTicks(); }).observe(document.body); // the projects load in later
+    placeTicks();
+  }
+
+  /* ---------- extras: the garage (paint, time of day, drag to spin), the day and night switch, and "vroom" ----------
+     They need the 3D scene, so they only show up once main.js says the bike is ready. */
+  function store(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function recall(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function extras() {
+    var bike = window.__bike;
+    if (!bike || extras.done) return;
+    extras.done = true;
+    var openBtn = document.getElementById("garage-open"), panel = document.getElementById("garage"), closeBtn = document.getElementById("garage-close");
+    var dayBtn = document.getElementById("daynight"), swatches = panel ? panel.querySelectorAll("[data-paint]") : [], times = panel ? panel.querySelectorAll("[data-time]") : [];
+    function setPaint(name, save) {
+      if (!bike.paint(name)) return;
+      swatches.forEach(function (b) { b.setAttribute("aria-checked", String(b.dataset.paint === name)); });
+      if (save) store("bike-paint", name === "stealth" ? null : name);
+    }
+    function setDay(on, save) {
+      bike.day(on); root.classList.toggle("day", on);
+      if (dayBtn) { dayBtn.setAttribute("aria-pressed", String(on)); dayBtn.setAttribute("aria-label", on ? "Night time" : "Daytime"); }
+      times.forEach(function (b) { b.setAttribute("aria-checked", String((b.dataset.time === "day") === on)); });
+      if (save) store("bike-day", on ? "1" : null);
+    }
+    var p0 = recall("bike-paint"); if (p0) setPaint(p0, false);
+    if (recall("bike-day") === "1") setDay(true, false);
+    swatches.forEach(function (b) { b.addEventListener("click", function () { setPaint(b.dataset.paint, true); }); });
+    times.forEach(function (b) { b.addEventListener("click", function () { setDay(b.dataset.time === "day", true); }); });
+    if (dayBtn) { dayBtn.hidden = false; dayBtn.addEventListener("click", function () { setDay(!root.classList.contains("day"), true); }); }
+
+    function garage(on) {
+      root.classList.toggle("in-garage", on); bike.garage(on);
+      panel.hidden = !on; openBtn.setAttribute("aria-expanded", String(on));
+      setTimeout(function () { (on ? closeBtn : openBtn).focus(); }, 450); // once the button has faded back in
+    }
+    if (openBtn && panel) {
+      openBtn.hidden = false;
+      openBtn.addEventListener("click", function () { garage(true); });
+      closeBtn.addEventListener("click", function () { garage(false); });
+      document.addEventListener("keydown", function (e) { if (e.key === "Escape" && root.classList.contains("in-garage")) garage(false); });
+      // drag anywhere off the panel to spin the bike
+      var drag = null;
+      window.addEventListener("pointerdown", function (e) { if (root.classList.contains("in-garage") && !e.target.closest("#garage, .nav")) drag = { x: e.clientX, id: e.pointerId }; });
+      window.addEventListener("pointermove", function (e) { if (!drag || e.pointerId !== drag.id) return; bike.spin(-(e.clientX - drag.x) * 0.009); drag.x = e.clientX; });
+      window.addEventListener("pointerup", function () { drag = null; });
+      window.addEventListener("pointercancel", function () { drag = null; });
+    }
+
+    // "vroom": type it on a keyboard, or tap the screen three times quickly on a phone, for a wheelie
+    var typed = "", taps = [];
+    document.addEventListener("keydown", function (e) {
+      var tag = (e.target.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || e.target.isContentEditable || e.key.length !== 1) return;
+      typed = (typed + e.key.toLowerCase()).slice(-5);
+      if (typed === "vroom") { typed = ""; bike.wheelie(); }
+    });
+    var tap0 = null;
+    window.addEventListener("touchstart", function (e) { tap0 = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }, { passive: true });
+    window.addEventListener("touchend", function (e) {
+      var t = e.changedTouches[0];
+      if (!tap0 || !t || Math.hypot(t.clientX - tap0.x, t.clientY - tap0.y) > 12 || (e.target.closest && e.target.closest("a, button, input, .rail, #garage, .pview"))) { taps = []; return; }
+      var now = performance.now(); taps = taps.filter(function (x) { return now - x < 800; }); taps.push(now);
+      if (taps.length >= 3) { taps = []; bike.wheelie(); }
+    }, { passive: true });
+  }
+  if (window.__bike) extras(); else window.addEventListener("bike-ready", extras);
 })();
