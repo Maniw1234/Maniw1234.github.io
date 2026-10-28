@@ -98,18 +98,21 @@
         <span>mani</span>
       </a>
       <nav aria-label="Main">
-        <ul class="nav__links" id="nav-links">
+        <ul class="nav__links">
           <li><a href="#about" data-section="about">About</a></li>
           <li><a href="#projects" data-section="projects">Projects</a></li>
           <li><a href="#skills" data-section="skills">Skills</a></li>
           <li><a href="#contact" data-section="contact">Contact</a></li>
-          <li><a class="nav__play" href="play.html">Play</a></li>
         </ul>
       </nav>
-      <button class="sound" id="sound" type="button" aria-pressed="false" hidden><i aria-hidden="true"></i><span>Sound off</span></button>
-      <button class="nav__toggle" type="button" aria-expanded="false" aria-controls="nav-links" aria-label="Open menu">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 8h16M4 16h16"/></svg>
-      </button>
+      <div class="nav__end">
+        <button class="sound" id="sound" type="button" aria-pressed="false" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>
+          <i aria-hidden="true"></i><span>Sound off</span>
+        </button>
+        <a class="nav__play" href="play.html">Play</a>
+      </div>
+      <span class="nav__glint" aria-hidden="true"></span>
     </div>
   </header>
 
