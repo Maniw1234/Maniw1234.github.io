@@ -130,9 +130,12 @@ html.at-end .play-cta, html.riding .play-cta { opacity: 0; visibility: hidden; t
 .daynight[aria-pressed="true"] .daynight__moon { opacity: 1; transform: none; }
 @media (hover: hover) and (pointer: fine) { .daynight:hover { background: rgba(255, 255, 255, .07); color: var(--ink); } }
 html.day .hero h1, html.day .hero p { text-shadow: 0 2px 18px rgba(4, 5, 10, .6); }
+html.day .kicker, html.day .cue, html.day .hero__roles, html.day .hero__text { color: rgba(255, 255, 255, .9); text-shadow: 0 1px 10px rgba(4, 5, 10, .75); }
+html.day .cue i { border-color: rgba(255, 255, 255, .9); }
+html.day .hero h1 .g-text { text-shadow: none; filter: drop-shadow(0 2px 14px rgba(4, 5, 10, .45)); }
 /* daytime: a soft shade behind the hero words so they stay readable on the bright sky */
 html.day .hero { position: relative; }
-html.day .hero::before { content: ""; position: absolute; inset: -60px -80px -40px -120px; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(4, 5, 10, .62), rgba(4, 5, 10, .35) 60%, transparent); filter: blur(10px); }
+html.day .hero::before { content: ""; position: absolute; inset: -60px -80px -40px -120px; z-index: -1; pointer-events: none; background: radial-gradient(closest-side, rgba(4, 5, 10, .34), rgba(4, 5, 10, .16) 60%, transparent); filter: blur(10px); }
 
 /* ---------- garage: a button bottom left, and a panel to pick the paint and the time of day while you spin the bike ---------- */
 .garage-cta { position: fixed; z-index: 21; left: max(20px, env(safe-area-inset-left)); bottom: max(20px, env(safe-area-inset-bottom)); display: inline-flex; align-items: center; gap: 9px; height: 50px; padding: 0 20px 0 16px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .14); background: rgba(12, 13, 22, .78); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--ink); font: 600 14px var(--font); letter-spacing: .02em; cursor: pointer; transition: opacity .4s ease, transform .4s cubic-bezier(.2, .8, .2, 1), visibility 0s, border-color .25s ease; }
