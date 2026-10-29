@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { AfterimagePass } from "three/addons/postprocessing/AfterimagePass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -17,11 +18,11 @@ const perf = { level: 0, t: 0, n: 0, wait: 2 }; // speed governor, see governor(
 
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" }); // the picture is drawn through the post passes, so canvas antialiasing would only cost
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: !LITE, powerPreference: "high-performance" });
 } catch (e) {
   throw new Error("WebGL unavailable"); // CSS fallback stays visible
 }
-renderer.setPixelRatio(LITE ? 1 : Math.min(devicePixelRatio, 1.5));
+renderer.setPixelRatio(LITE ? 1 : Math.min(devicePixelRatio, 1.75));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
@@ -170,6 +171,7 @@ const shadowBlob = (() => {
 
 // Roadside light posts
 let lampCaps = null, lampBase = null, lampsLit = true; // the way in lights the lamps one by one
+let lampPosts = null, lampSpots = [], lampNear = []; // a post the camera is about to pass through steps out of the way
 {
   const N = 2 * 34;
   const posts = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.03, 0.04, 2.2, 8).translate(0, 1.1, 0), new THREE.MeshStandardMaterial({ color: 0x1b1f2e, metalness: 0.8, roughness: 0.3 }), N);
@@ -177,11 +179,12 @@ let lampCaps = null, lampBase = null, lampsLit = true; // the way in lights the 
   const d = new THREE.Object3D(), tc = new THREE.Color();
   for (let i = 0; i < N; i++) {
     const side = i % 2 ? 1 : -1, x = -24 + Math.floor(i / 2) * 3;
-    if ([0, 14, 48, 57, 64.5].some((r) => Math.abs(x - r) < 7.5)) { d.position.set(0, -50, 0); d.updateMatrix(); posts.setMatrixAt(i, d.matrix); caps.setMatrixAt(i, d.matrix); continue; } // keep every parked spot clear, so the circling camera never passes through a post
+    if (Math.abs(x) < 4.5) { d.position.set(0, -50, 0); d.updateMatrix(); posts.setMatrixAt(i, d.matrix); caps.setMatrixAt(i, d.matrix); lampSpots.push(null); continue; } // keep the showroom spot clear
+    lampSpots.push([x, side * 3.2]);
     d.position.set(x, 0, side * 3.2); d.updateMatrix(); posts.setMatrixAt(i, d.matrix);
     d.position.y = 2.25; d.updateMatrix(); caps.setMatrixAt(i, d.matrix); caps.setColorAt(i, gem((x + 24) / 100, tc).multiplyScalar(2.2));
   }
-  scene.add(posts, caps); lampCaps = caps;
+  scene.add(posts, caps); lampCaps = caps; lampPosts = posts; lampNear = lampSpots.map(() => false);
   lampBase = caps.instanceColor.array.slice();
 }
 
@@ -307,6 +310,7 @@ function spawnSmoke(at, n) {
 /* ---------------- post-processing ---------------- */
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
+const afterimage = new AfterimagePass(0); if (!LITE && !REDUCED) composer.addPass(afterimage);
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.75, 0.5, 0.55); composer.addPass(bloom);
 const fx = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, uAb: { value: 0 } },
@@ -735,10 +739,23 @@ function frame(t, dt, p) {
   if (Math.abs(viewShift) > 0.001) camera.setViewOffset(innerWidth, innerHeight, 0, -viewShift * innerHeight, innerWidth, innerHeight);
   else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   ground.material.uniforms.uCam.value.copy(camera.position);
+  if (lampPosts) { // hide only a post (and its light) the camera is right next to, so the lens never cuts through one
+    let moved = false; const m = new THREE.Matrix4();
+    for (let i = 0; i < lampSpots.length; i++) {
+      const sp = lampSpots[i]; if (!sp) continue;
+      const near = Math.hypot(sp[0] - camera.position.x, sp[1] - camera.position.z) < 0.9;
+      if (near === lampNear[i]) continue;
+      lampNear[i] = near; moved = true;
+      m.makeTranslation(sp[0], near ? -50 : 0, sp[1]); lampPosts.setMatrixAt(i, m);
+      m.makeTranslation(sp[0], near ? -50 : 2.25, sp[1]); lampCaps.setMatrixAt(i, m);
+    }
+    if (moved) lampPosts.instanceMatrix.needsUpdate = lampCaps.instanceMatrix.needsUpdate = true;
+  }
 
   // post
+  afterimage.uniforms.damp.value = 0.55 * smooth(0.55, 1, S.speed) + (S.seg === "C" ? 0.25 : 0);
   fx.uniforms.uAb.value = REDUCED ? 0 : 0.004 + S.speed * 0.012 + shake * 0.05 + burst * 0.02;
-  bloom.strength = 0.7 + S.boost * 0.2 + burst * 0.8;
+  bloom.strength = 0.7 + S.boost * 0.2 + burst * 1.1;
   extra.day += (extra.dayWant - extra.day) * (1 - Math.exp(-rdt * 2.2));
   const D = extra.day;
   sky.material.uniforms.uDay.value = D; if (stars) stars.material.opacity = 1 - D;
@@ -838,33 +855,25 @@ function ready() { if (snd.want) fetchLoops(); requestAnimationFrame(() => reque
 loading(0.1);
 if (canvas.dataset.model) loadBikeModel(canvas.dataset.model); else ready();
 
-/* ---------------- speed governor: older phones and laptops drop to lighter effects on their own ----------------
-   After the page has loaded, the average frame time is checked every 2 s. Too slow (under ~38 fps), and it steps
-   down: first fewer pixels and no motion trail, then fewer pixels again and a cheaper glow. It never steps back up. */
-// steps down until the ride holds ~45 fps: 1 sharpness to 1x and a cheaper glow, 2 fewer pixels, 3 no glow pass
+/* ---------------- speed governor: a slow device draws fewer pixels, never fewer effects ----------------
+   After the page has loaded, the average frame time is checked every 1.2 s. Too slow, and the picture is drawn at a
+   lower resolution (and the glow at a quarter of the pixels). The glow, motion trail and lamps always stay on. */
 function governor(raw) {
-  if (perf.level >= 3 || raw > 0.5) return; // a long gap is a background tab, not a slow device
+  if (perf.level >= 2 || raw > 0.5) return; // a long gap is a background tab, not a slow device
   if (!document.documentElement.classList.contains("is-loaded")) return; // loading is always slow; judge the ride
   if (perf.wait > 0) { perf.wait -= raw; return; }
   perf.t += raw; perf.n++;
   if (perf.t < 1.2) return;
   const ms = perf.t / perf.n * 1000; perf.t = perf.n = 0;
   if (ms < 22) return;
-  setPerf(perf.level + (ms > 45 ? 2 : 1)); perf.wait = 0.8; // very slow: two steps at once
-  try { localStorage.setItem("bike-perf", String(perf.level)); } catch (e) {} // the next visit starts where this one settled
+  setPerf(perf.level + 1); perf.wait = 0.8;
 }
 function setPerf(level) {
-  perf.level = clamp(level, 0, 3);
-  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : perf.level === 1 ? Math.min(devicePixelRatio, 1) : perf.level === 2 ? 0.8 : 0.66);
-  bloom.enabled = perf.level < 3;
+  perf.level = clamp(level, 0, 2);
+  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : perf.level === 1 ? Math.min(devicePixelRatio, 1) : 0.8);
   resize();
 }
-{ // start lower on built-in graphics chips, or at the level an earlier visit settled on
-  let lv = 0;
-  try { const g = renderer.getContext(), x = g.getExtension("WEBGL_debug_renderer_info"); if (x && /Intel|Iris|UHD|HD Graphics|Microsoft Basic|SwiftShader|llvmpipe|Mali|Adreno/i.test(g.getParameter(x.UNMASKED_RENDERER_WEBGL))) lv = 1; } catch (e) {}
-  try { lv = Math.max(lv, +localStorage.getItem("bike-perf") || 0); } catch (e) {}
-  if (lv && !LITE) setPerf(lv);
-}
+try { localStorage.removeItem("bike-perf"); } catch (e) {} // older visits stored a lower-effects level; start full every time
 
 /* ---------------- drive ---------------- */
 document.documentElement.classList.add("has-gl");
