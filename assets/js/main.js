@@ -3,7 +3,6 @@ import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
-import { AfterimagePass } from "three/addons/postprocessing/AfterimagePass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -18,11 +17,11 @@ const perf = { level: 0, t: 0, n: 0, wait: 2 }; // speed governor, see governor(
 
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: !LITE, powerPreference: "high-performance" });
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" }); // the picture is drawn through the post passes, so canvas antialiasing would only cost
 } catch (e) {
   throw new Error("WebGL unavailable"); // CSS fallback stays visible
 }
-renderer.setPixelRatio(LITE ? 1 : Math.min(devicePixelRatio, 1.75));
+renderer.setPixelRatio(LITE ? 1 : Math.min(devicePixelRatio, 1.5));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
@@ -85,6 +84,12 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24), new THREE.Shad
   vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }",
   fragmentShader: `varying vec3 vP; uniform float uDay;
     void main(){
+      vec3 c = vec3(0.012,0.014,0.03);
+      c += vec3(0.10,0.25,0.55) * pow(max(0., 1. - abs(vP.y - 0.05) * 4.), 3.) * 0.35;
+      c += vec3(0.45,0.28,0.65) * smoothstep(0.75, 1., dot(vP, normalize(vec3(0.6,0.25,-0.7)))) * 0.5;
+      c += vec3(0.60,0.22,0.30) * smoothstep(0.8, 1., dot(vP, normalize(vec3(-0.7,0.15,-0.6)))) * 0.35;
+      c *= 0.45;
+      if (uDay > 0.001) { // day only (skipped at night, it is the costly part)
       // day: a clear blue sky that warms to peach at the horizon, with the sun low on the right
       float h = clamp(vP.y, 0., 1.);
       vec3 d = mix(vec3(0.42,0.58,0.85), vec3(0.06,0.22,0.62), pow(h, 0.45));
@@ -99,11 +104,9 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24), new THREE.Shad
         cl += a * mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y); r *= 2.03; a *= 0.5; }
       cl = smoothstep(0.52, 0.8, cl) * smoothstep(0.02, 0.2, vP.y);
       d = mix(d, vec3(1.0, 0.99, 0.97), cl * 0.85);
-      vec3 c = vec3(0.012,0.014,0.03);
-      c += vec3(0.10,0.25,0.55) * pow(max(0., 1. - abs(vP.y - 0.05) * 4.), 3.) * 0.35;
-      c += vec3(0.45,0.28,0.65) * smoothstep(0.75, 1., dot(vP, normalize(vec3(0.6,0.25,-0.7)))) * 0.5;
-      c += vec3(0.60,0.22,0.30) * smoothstep(0.8, 1., dot(vP, normalize(vec3(-0.7,0.15,-0.6)))) * 0.35;
-      gl_FragColor = vec4(mix(c * 0.45, d, uDay), 1.);
+      c = mix(c, d, uDay);
+      }
+      gl_FragColor = vec4(c, 1.);
     }`
 }));
 scene.add(sky);
@@ -142,6 +145,8 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
       float front = exp(-abs(dr - uReveal) * 0.9) * step(dr, uReveal + 6.) * uFront;
       c = c * on + gc * (g * 2.6 + edge * 1.6 + 0.1) * front;
       vec4 night = vec4(c * fade, ((g * 0.6 + edge + dash + road * 0.6) * on + front * (g * 2. + 0.2)) * fade);
+      gl_FragColor = night;
+      if (uDay > 0.001) {
       // day: pale concrete plaza with faint expansion joints, a grey asphalt road, white lines; hazes into the sky
       float n = fract(sin(dot(floor(p * 3.), vec2(12.9898, 78.233))) * 43758.5453);
       vec3 concrete = vec3(0.30, 0.295, 0.28) * (0.94 + 0.06 * n) * (1. - 0.18 * max(line(p.x / 4., 1.), line(p.y / 4., 1.)));
@@ -151,6 +156,7 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
       dc = mix(dc, vec3(0.75), clamp(edge * 0.9 + dash, 0., 1.));
       dc = mix(uFog, dc, exp(-distance(vW, uCam) * 0.012));
       gl_FragColor = mix(night, vec4(dc, 1.), uDay);
+      }
     }`
 }));
 ground.rotation.x = -Math.PI / 2; scene.add(ground);
@@ -171,7 +177,7 @@ let lampCaps = null, lampBase = null, lampsLit = true; // the way in lights the 
   const d = new THREE.Object3D(), tc = new THREE.Color();
   for (let i = 0; i < N; i++) {
     const side = i % 2 ? 1 : -1, x = -24 + Math.floor(i / 2) * 3;
-    if (Math.abs(x) < 4.5) { d.position.set(0, -50, 0); d.updateMatrix(); posts.setMatrixAt(i, d.matrix); caps.setMatrixAt(i, d.matrix); continue; } // keep the showroom spot clear
+    if ([0, 14, 48, 57, 64.5].some((r) => Math.abs(x - r) < 7.5)) { d.position.set(0, -50, 0); d.updateMatrix(); posts.setMatrixAt(i, d.matrix); caps.setMatrixAt(i, d.matrix); continue; } // keep every parked spot clear, so the circling camera never passes through a post
     d.position.set(x, 0, side * 3.2); d.updateMatrix(); posts.setMatrixAt(i, d.matrix);
     d.position.y = 2.25; d.updateMatrix(); caps.setMatrixAt(i, d.matrix); caps.setColorAt(i, gem((x + 24) / 100, tc).multiplyScalar(2.2));
   }
@@ -301,7 +307,6 @@ function spawnSmoke(at, n) {
 /* ---------------- post-processing ---------------- */
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const afterimage = new AfterimagePass(0); if (!LITE && !REDUCED) composer.addPass(afterimage);
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.75, 0.5, 0.55); composer.addPass(bloom);
 const fx = new ShaderPass({
   uniforms: { tDiffuse: { value: null }, uAb: { value: 0 } },
@@ -317,7 +322,7 @@ composer.addPass(new OutputPass());
 function resize() {
   const w = innerWidth, h = innerHeight;
   renderer.setSize(w, h, false); composer.setSize(w, h);
-  if (LITE || perf.level) bloom.resolution.set(w / (perf.level > 1 ? 4 : 2), h / (perf.level > 1 ? 4 : 2));
+  const pr = renderer.getPixelRatio(); if (LITE || perf.level) bloom.setSize(w * pr / 2, h * pr / 2); // the glow at a quarter of the pixels
   camera.aspect = w / h; PORTRAIT = w / h < 0.8;
   camera.fov = w / h < 0.8 ? 55 : 42; // portrait phones need a wider view
   camera.updateProjectionMatrix();
@@ -732,7 +737,6 @@ function frame(t, dt, p) {
   ground.material.uniforms.uCam.value.copy(camera.position);
 
   // post
-  afterimage.uniforms.damp.value = 0.55 * smooth(0.55, 1, S.speed) + (S.seg === "C" ? 0.25 : 0);
   fx.uniforms.uAb.value = REDUCED ? 0 : 0.004 + S.speed * 0.012 + shake * 0.05 + burst * 0.02;
   bloom.strength = 0.7 + S.boost * 0.2 + burst * 0.8;
   extra.day += (extra.dayWant - extra.day) * (1 - Math.exp(-rdt * 2.2));
@@ -837,19 +841,29 @@ if (canvas.dataset.model) loadBikeModel(canvas.dataset.model); else ready();
 /* ---------------- speed governor: older phones and laptops drop to lighter effects on their own ----------------
    After the page has loaded, the average frame time is checked every 2 s. Too slow (under ~38 fps), and it steps
    down: first fewer pixels and no motion trail, then fewer pixels again and a cheaper glow. It never steps back up. */
+// steps down until the ride holds ~45 fps: 1 sharpness to 1x and a cheaper glow, 2 fewer pixels, 3 no glow pass
 function governor(raw) {
-  if (perf.level >= 2 || raw > 0.5) return; // a long gap is a background tab, not a slow device
+  if (perf.level >= 3 || raw > 0.5) return; // a long gap is a background tab, not a slow device
   if (!document.documentElement.classList.contains("is-loaded")) return; // loading is always slow; judge the ride
   if (perf.wait > 0) { perf.wait -= raw; return; }
   perf.t += raw; perf.n++;
-  if (perf.t < 2) return;
+  if (perf.t < 1.2) return;
   const ms = perf.t / perf.n * 1000; perf.t = perf.n = 0;
-  if (ms < 26) return;
-  perf.level++; perf.wait = 1.5;
-  afterimage.enabled = false;
-  renderer.setPixelRatio(perf.level === 1 ? Math.min(renderer.getPixelRatio(), 1) : 0.7);
-  bloom.resolution.set(innerWidth / (perf.level === 1 ? 2 : 4), innerHeight / (perf.level === 1 ? 2 : 4));
+  if (ms < 22) return;
+  setPerf(perf.level + (ms > 45 ? 2 : 1)); perf.wait = 0.8; // very slow: two steps at once
+  try { localStorage.setItem("bike-perf", String(perf.level)); } catch (e) {} // the next visit starts where this one settled
+}
+function setPerf(level) {
+  perf.level = clamp(level, 0, 3);
+  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : perf.level === 1 ? Math.min(devicePixelRatio, 1) : perf.level === 2 ? 0.8 : 0.66);
+  bloom.enabled = perf.level < 3;
   resize();
+}
+{ // start lower on built-in graphics chips, or at the level an earlier visit settled on
+  let lv = 0;
+  try { const g = renderer.getContext(), x = g.getExtension("WEBGL_debug_renderer_info"); if (x && /Intel|Iris|UHD|HD Graphics|Microsoft Basic|SwiftShader|llvmpipe|Mali|Adreno/i.test(g.getParameter(x.UNMASKED_RENDERER_WEBGL))) lv = 1; } catch (e) {}
+  try { lv = Math.max(lv, +localStorage.getItem("bike-perf") || 0); } catch (e) {}
+  if (lv && !LITE) setPerf(lv);
 }
 
 /* ---------------- drive ---------------- */

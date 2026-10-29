@@ -93,7 +93,7 @@
         sweep: function () { return sweep < 0 ? -1 : (Date.now() - sweep) / 1000; },
         done: function () {
           if (finished) return; finished = true; want = 0; clearTimeout(timer);
-          document.getElementById("loader-label").hidden = true;
+          document.getElementById("loader-label").textContent = "Engine ready";
           btn.hidden = hint.hidden = false; root.classList.add("is-ready");
           try { btn.focus({ preventScroll: true }); } catch (e) {}
           addEventListener("keydown", key);
