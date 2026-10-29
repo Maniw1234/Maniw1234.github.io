@@ -53,8 +53,8 @@ html:not(.js) .loader, .loader[hidden] { display: none; }
 .loader { perspective: 800px; }
 .loader__dial { transform: rotateX(16deg) rotateY(-8deg); transform-style: preserve-3d; animation: dial-float 3.4s ease-in-out infinite; transition: transform .9s cubic-bezier(.5, 0, .7, .4); }
 @keyframes dial-float { 50% { transform: rotateX(8deg) rotateY(8deg) translateY(-6px); } }
-.is-loaded .loader { opacity: 0; pointer-events: none; transition: opacity .5s ease; }
-.is-loaded .loader__dial { animation: none; transform: scale(1.3); opacity: 0; transition: transform .45s cubic-bezier(.5, 0, .7, .4), opacity .35s ease; } /* the dial punches forward and is gone */
+.is-loaded .loader { opacity: 0; filter: blur(10px); pointer-events: none; transition-duration: .9s; }
+.is-loaded .loader__dial { animation: none; transform: translateZ(700px) rotateX(-20deg); } /* the dial flies past the camera */
 .is-loaded .loader__label, .is-loaded .loader__n { opacity: 0; transition: opacity .3s ease; }
 .is-loaded .loader__start, .is-loaded .loader__hint { opacity: 0; }
 .loader__dial { position: relative; width: min(220px, 56vw); aspect-ratio: 1; }
