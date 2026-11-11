@@ -14,7 +14,7 @@ const canvas = document.getElementById("scene");
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let PORTRAIT = innerWidth / innerHeight < 0.8;
 const LITE = innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
-const perf = { level: 0, t: 0, n: 0, wait: 2 }; // speed governor, see governor() below
+const perf = { level: 0, t: 0, n: 0, slow: 0, wait: 2 }; // speed governor, see governor() below
 
 let renderer;
 try {
@@ -929,10 +929,10 @@ function governor(raw) {
   if (perf.level >= 2 || raw > 0.5) return; // a long gap is a background tab, not a slow device
   if (!document.documentElement.classList.contains("is-loaded")) return; // loading is always slow; judge the ride
   if (perf.wait > 0) { perf.wait -= raw; return; }
-  perf.t += raw; perf.n++;
+  perf.t += raw; perf.n++; if (raw > 0.03) perf.slow++;
   if (perf.t < 1.2) return;
-  const ms = perf.t / perf.n * 1000; perf.t = perf.n = 0;
-  if (ms < 22) return;
+  const ms = perf.t / perf.n * 1000, hitchy = perf.slow / perf.n > 0.12; perf.t = perf.n = perf.slow = 0;
+  if (ms < 19 && !hitchy) return; // under about 52 frames a second, or more than one frame in eight late
   setPerf(perf.level + 1); perf.wait = 0.8;
 }
 function setPerf(level) {
@@ -941,6 +941,14 @@ function setPerf(level) {
   resize();
 }
 try { localStorage.removeItem("bike-perf"); } catch (e) {} // older visits stored a lower-effects level; start full every time
+
+// built-in graphics (most laptops) cannot hold the full picture smoothly: start one step down, the governor
+// still goes lower if that is not enough
+try {
+  const gl = renderer.getContext(), info = gl.getExtension("WEBGL_debug_renderer_info");
+  const gpu = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  if (!LITE && /intel|uhd|iris|radeon\(tm\) graphics|vega|swiftshader|llvmpipe|basic render/i.test(gpu) && !/arc|rtx|gtx|\brx\b/i.test(gpu)) setPerf(1);
+} catch (e) {}
 
 /* ---------------- drive ---------------- */
 document.documentElement.classList.add("has-gl");
