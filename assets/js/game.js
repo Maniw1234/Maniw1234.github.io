@@ -445,41 +445,38 @@ function resize() {
 resize(); addEventListener("resize", resize);
 
 /* ---------------- sound: real recordings only, driven by a six-speed gearbox ---------------- */
-// the H2 plays the same ZX-6R loops as the home page (rpm). The cars have no recordings of their own, so they stay silent.
-const SOUNDS = {
-  road: { idle: 1230, span: 11270, loops: [["idle", 1230, 0.75], ["mid", 5340, 0.95], ["high", 8900, 0.65], ["top", 12300, 0.9]] }
-};
+// the H2 plays the same ZX-6R loops as the home page: loop, rpm it was recorded at, loop length
+const LOOPS = [["idle", 1230, 0.75], ["mid", 5340, 0.95], ["high", 8900, 0.65], ["top", 12300, 0.9]], IDLE_RPM = 1230, RPM_SPAN = 11270;
 const GEARS = [24, 37, 49, 61, 74, 92]; // m/s at the redline in each gear
-const snd = { ctx: null, on: store.get("ride-sound") !== false, sets: {}, bike: "road", rpm: 1230, load: 0 };
+const snd = { ctx: null, on: store.get("ride-sound") !== false, layers: [], rpm: IDLE_RPM, load: 0 };
 function initAudio() {
   if (snd.ctx) return;
   const ctx = new (window.AudioContext || window.webkitAudioContext)(); snd.ctx = ctx;
   const master = ctx.createGain(); master.gain.value = 0; snd.master = master;
   const tone = ctx.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 2000; tone.Q.value = 0.5; snd.tone = tone;
   tone.connect(master).connect(ctx.destination);
-  Object.keys(SOUNDS).forEach((kind) => {
-    Promise.all(SOUNDS[kind].loops.map(([n, , len]) => fetch("assets/audio/engine-" + n + ".mp3").then((r) => r.arrayBuffer()).then((a) => new Promise((ok, no) => ctx.decodeAudioData(a, ok, no))).then((buf) => {
-      const src = ctx.createBufferSource(), g = ctx.createGain();
-      src.buffer = buf; src.loop = true; src.loopStart = 0.15; src.loopEnd = 0.15 + len; g.gain.value = 0; src.connect(g).connect(tone); src.start(0, 0.15);
-      return { src, g };
-    }))).then((l) => { snd.sets[kind] = l; }).catch(() => {});
-  });
+  Promise.all(LOOPS.map(([n, , len]) => fetch("assets/audio/engine-" + n + ".mp3").then((r) => r.arrayBuffer()).then((a) => new Promise((ok, no) => ctx.decodeAudioData(a, ok, no))).then((buf) => {
+    const src = ctx.createBufferSource(), g = ctx.createGain();
+    src.buffer = buf; src.loop = true; src.loopStart = 0.15; src.loopEnd = 0.15 + len; g.gain.value = 0; src.connect(g).connect(tone); src.start(0, 0.15);
+    return { src, g };
+  }))).then((l) => { snd.layers = l; }).catch(() => {});
 }
 // n: 0 at idle, 1 at the redline
 function audioTick(n, load) {
   snd.load = load;
-  const S = SOUNDS[snd.bike], rpm = S.idle + S.span * n; snd.rpm = rpm;
+  const rpm = IDLE_RPM + RPM_SPAN * n; snd.rpm = rpm;
   if (!snd.ctx) return;
-  const now = snd.ctx.currentTime, E = S.loops;
+  const now = snd.ctx.currentTime, E = LOOPS;
+  // the two loops either side of the revs, blended evenly on a log scale; each re-pitched to the revs
   let i = 0; while (i < E.length - 2 && rpm > E[i + 1][1]) i++;
   const x = clamp(Math.log(Math.max(rpm, 1) / E[i][1]) / Math.log(E[i + 1][1] / E[i][1]), 0, 1);
-  Object.keys(snd.sets).forEach((kind) => snd.sets[kind].forEach((l, k) => {
-    const mine = kind === snd.bike, g = !mine ? 0 : k === i ? Math.cos(x * Math.PI / 2) : k === i + 1 ? Math.sin(x * Math.PI / 2) : 0;
-    l.want = g; l.g.gain.setTargetAtTime(g, now, mine ? 0.03 : 0.06);
-    if (mine) l.src.playbackRate.setTargetAtTime(clamp(rpm / E[k][1], 0.5, 2.5), now, 0.03);
-  }));
-  snd.tone.frequency.setTargetAtTime(1200 + 5500 * load + (1230 + 11270 * n) * 0.3, now, 0.05);
-  snd.master.gain.setTargetAtTime(snd.on && game.mode !== "pause" && snd.sets[snd.bike] ? 0.85 * (0.55 + 0.45 * load) : 0, now, 0.08);
+  snd.layers.forEach((l, k) => {
+    const g = k === i ? Math.cos(x * Math.PI / 2) : k === i + 1 ? Math.sin(x * Math.PI / 2) : 0;
+    l.want = g; l.g.gain.setTargetAtTime(g, now, 0.03);
+    l.src.playbackRate.setTargetAtTime(clamp(rpm / E[k][1], 0.5, 2.5), now, 0.03);
+  });
+  snd.tone.frequency.setTargetAtTime(1200 + 5500 * load + rpm * 0.3, now, 0.05);
+  snd.master.gain.setTargetAtTime(snd.on && game.mode !== "pause" && snd.layers.length ? 0.85 * (0.55 + 0.45 * load) : 0, now, 0.08);
 }
 document.addEventListener("visibilitychange", () => { if (!snd.ctx) return; if (document.hidden) snd.ctx.suspend(); else snd.ctx.resume(); if (document.hidden && game.mode === "run") pause(true); });
 
@@ -625,7 +622,7 @@ function gearbox(dt, inp) {
   if (game.mode !== "run") { // free revs before the start
     const want = inp.up * 0.78;
     game.n += (want - game.n) * (1 - Math.exp(-dt * (want > game.n ? 6 : 2.6)));
-    game.gear = 0; game.rpm = 1230 + 11270 * game.n; return;
+    game.gear = 0; game.rpm = IDLE_RPM + RPM_SPAN * game.n; return;
   }
   let g = game.gear;
   if (v / GEARS[g] > 0.965 && g < GEARS.length - 1) { while (g < GEARS.length - 1 && v / GEARS[g] > 0.965) g++; game.shift = 0.12; flamePop = 0.7; }
@@ -636,7 +633,7 @@ function gearbox(dt, inp) {
   if (R.air) n = Math.min(1.01, game.n + (inp.up ? 0.8 : -0.35) * dt); // wheel spins free in the air
   if (game.shift > 0) { game.shift -= dt; n = n * 0.93 - 0.008; }
   game.n += (clamp(n, -0.007, 1.01) - game.n) * (1 - Math.exp(-dt * 12));
-  game.rpm = 1230 + 11270 * game.n; // shown on the rev bar on the same scale for both bikes
+  game.rpm = IDLE_RPM + RPM_SPAN * game.n; // the rev bar
 }
 
 function tick(dt, raw) {
@@ -855,7 +852,7 @@ document.documentElement.classList.add("has-gl");
 // test hooks
 window.__game = {
   C, get R() { return R; }, game, keys, touch, perf: () => ({ level: perf.level, ratio: renderer.getPixelRatio() }), model: () => modelReady,
-  audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, rpm: Math.round(snd.rpm), bike: snd.bike, layers: (snd.sets[snd.bike] || []).length, sets: Object.keys(snd.sets) }),
+  audio: () => ({ on: snd.on, state: snd.ctx && snd.ctx.state, rpm: Math.round(snd.rpm), layers: snd.layers.length }),
   jump: (s) => { R.best = s + 10; reset(C, R); R.v = 30; firstFrame = true; camYaw = R.yaw; }, // reset() lands 10 m behind your furthest point
   finishNow: () => { game.gate = C.gates.length - 1; R.best = C.gates[C.gates.length - 1]; },
   bike: () => ({ model: !!h2.holder, spinning: h2.wheels.map((w) => w && +w.rotation.z.toFixed(2)) }),

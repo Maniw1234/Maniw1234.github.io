@@ -37,7 +37,8 @@ const smooth = (a, b, v) => { const t = clamp((v - a) / (b - a), 0, 1); return t
 const BLUE = new THREE.Color(0x4796e3), VIOLET = new THREE.Color(0x9177c7), ROSE = new THREE.Color(0xca6673);
 const gem = (t, out = new THREE.Color()) => t < 0.5 ? out.copy(BLUE).lerp(VIOLET, t * 2) : out.copy(VIOLET).lerp(ROSE, (t - 0.5) * 2);
 let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
+const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3(), tmpV3 = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), tmpM = new THREE.Matrix4(), tmpC = new THREE.Color();
+const TRAIL_RED = new THREE.Color(1, 0.3, 0.4);
 function glowTexture() {
   const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d");
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.2, "rgba(255,255,255,.5)"); g.addColorStop(1, "rgba(255,255,255,0)");
@@ -514,7 +515,7 @@ addEventListener("pointermove", (e) => { pointer.x = e.clientX / innerWidth * 2 
 
 /* ---------------- frame ---------------- */
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
-let shake = 0, lastSeg = null, wasAir = false, wasRest = null, ignite = 0, idleW = 0, orbitA = 0, firstFrame = true, blip = 0, nextBlip = 1.5, flash = 0;
+let shake = 0, wasAir = false, ignite = 0, idleW = 0, orbitA = 0, firstFrame = true, blip = 0, nextBlip = 1.5, flash = 0;
 const flashEl = document.getElementById("flash");
 
 /* ---------------- the way in ----------------
@@ -630,7 +631,7 @@ function frame(t, dt, p) {
   const sw = ignition >= 0 ? (nowMs - ignition) / 1000 : -1; // the start button's needle sweep: redline and back
   if (sw >= 0 && sw < 1) { const k = sw < 0.42 ? 1 - (1 - sw / 0.42) ** 3 : Math.max(0, 1 - (sw - 0.42) / 0.5); S.rpm = Math.max(S.rpm, 1230 + 10500 * k); S.throttle = Math.max(S.throttle, k); }
   if (wasAir && !S.air) { shake = 0.35; spawnSparks(tmpV.copy(S.pos).setY(0.05), 140, new THREE.Vector3(-1, 0.6, 0), 1.6, 9); spawnSmoke(S.pos, 10); flash = 0.18; }
-  wasAir = S.air; wasRest = S.rest; lastSeg = S.seg;
+  wasAir = S.air;
 
   // bike transform
   bike.position.copy(S.pos);
@@ -647,7 +648,7 @@ function frame(t, dt, p) {
     if (m.visible) { m.position.x = S.pos.x; m.position.z = S.pos.z; m.scale.setScalar(0.6 + u * (16 - k * 4)); m.material.opacity = 0.9 * Math.exp(-u * 2.2) * (1 - u / 1.8); }
   });
   if (lampCaps && (fu < 90 || !lampsLit)) {
-    const col = lampCaps.instanceColor.array, mt = new THREE.Matrix4(), lp = new THREE.Vector3();
+    const col = lampCaps.instanceColor.array, mt = tmpM, lp = tmpV3;
     for (let i = 0; i < lampCaps.count; i++) {
       lampCaps.getMatrixAt(i, mt); lp.setFromMatrixPosition(mt);
       const d = Math.hypot(lp.x - S.pos.x, lp.z - S.pos.z), k = fu >= 90 ? 1 : clamp((reach - d) / 1.5, 0, 1) * (1 + 1.6 * Math.exp(-Math.max(0, reach - d) * 0.7));
@@ -671,16 +672,15 @@ function frame(t, dt, p) {
   flameLight.intensity = power * 22 * (0.8 + 0.2 * Math.sin(t * 70)); flameGlow.material.opacity = power * 0.75;
   if (power > 0.3 && rnd() < power * 0.7) {
     const tip = flames.getWorldPosition(tmpV);
-    const dir = tmpV2.copy(B.exhaustDir).applyQuaternion(body.getWorldQuaternion(new THREE.Quaternion()));
+    const dir = tmpV2.copy(B.exhaustDir).applyQuaternion(body.getWorldQuaternion(tmpQ));
     spawnSparks(tip, 2, dir, 0.8, 3 + power * 4, true);
   }
 
   // tail-light trail
   bike.updateMatrixWorld();
-  const tp = B.tail.getWorldPosition(new THREE.Vector3());
-  if (firstFrame) for (let i = 0; i < TRAIL; i++) trailPts.push(tp.clone());
-  trailPts.unshift(tp); trailPts.length = TRAIL;
-  const tc = new THREE.Color(), red = new THREE.Color(1, 0.3, 0.4);
+  if (firstFrame && !trailPts.length) { const p0 = B.tail.getWorldPosition(new THREE.Vector3()); for (let i = 0; i < TRAIL; i++) trailPts.push(p0.clone()); }
+  const tp = trailPts.pop(); B.tail.getWorldPosition(tp); trailPts.unshift(tp); // the oldest point is reused as the newest
+  const tc = tmpC, red = TRAIL_RED;
   for (let i = 0; i < TRAIL; i++) {
     const f = i / (TRAIL - 1), w = 0.05 * (1 - f) + 0.006, a = (1 - f) * clamp(S.speed * 1.4, 0, 1);
     const q = trailPts[i]; trailPos.set([q.x, q.y + w, q.z], i * 6); trailPos.set([q.x, q.y - w, q.z], i * 6 + 3);
@@ -689,7 +689,7 @@ function frame(t, dt, p) {
   trailGeo.attributes.position.needsUpdate = true; trailGeo.attributes.color.needsUpdate = true;
 
   // particles
-  const rear = B.wheels[1].getWorldPosition(new THREE.Vector3()).setY(0.06);
+  const rear = B.wheels[1].getWorldPosition(tmpV3).setY(0.06);
   if (S.smoke && rnd() < 0.8) spawnSmoke(rear, 1);
   if (S.sparks && rnd() < S.sparks) spawnSparks(rear, 6, tmpV.set(-Math.cos(S.yaw), 0.5, Math.sin(S.yaw)), 1.2, 6);
   for (let i = 0; i < SP; i++) {
@@ -740,7 +740,7 @@ function frame(t, dt, p) {
   else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   ground.material.uniforms.uCam.value.copy(camera.position);
   if (lampPosts) { // hide only a post (and its light) the camera is right next to, so the lens never cuts through one
-    let moved = false; const m = new THREE.Matrix4();
+    let moved = false; const m = tmpM;
     for (let i = 0; i < lampSpots.length; i++) {
       const sp = lampSpots[i]; if (!sp) continue;
       const near = Math.hypot(sp[0] - camera.position.x, sp[1] - camera.position.z) < 0.9;

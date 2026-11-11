@@ -177,11 +177,24 @@ export function step(C, R, input, dt) {
     const into = Math.sin(R.yaw - hh) * side;
     if (into > 0.02) { R.yaw -= wrapA(R.yaw - hh) * 0.5; R.v *= 0.9; ev.hit = Math.min(1, R.v * into / 20); }
   }
-  // solid scenery: knocks your speed off and pushes you clear
+  // solid scenery: knocks your speed off, pushes you clear and glances you off along it, turned towards the road.
+  // (Before, a head-on hit left the bike pinned against the wall: too slow to steer, pushed back every step.)
   const ci = Math.floor(R.x / C.cell), cj = Math.floor(R.z / C.cell);
   for (let p = -1; p <= 1; p++) for (let q = -1; q <= 1; q++) for (const o of C.solid.get((ci + p) * 100003 + cj + q) || []) {
     const dx = R.x - o.x, dz = R.z - o.z, d = Math.hypot(dx, dz), rr = o.r + 0.8;
-    if (d < rr && R.y < (o.hgt || 30)) { R.x = o.x + dx / (d || 1) * rr; R.z = o.z + dz / (d || 1) * rr; ev.hit = Math.min(1, av / 25); R.v *= 0.35; R.wobble = 1; }
+    if (d < rr && R.y < (o.hgt || 30)) {
+      const nx = d ? dx / d : Math.cos(R.yaw + Math.PI), nz = d ? dz / d : -Math.sin(R.yaw + Math.PI);
+      R.x = o.x + nx * rr; R.z = o.z + nz * rr;
+      const dir = Math.sign(R.v) || 1, into = -(Math.cos(R.yaw) * nx - Math.sin(R.yaw) * nz) * dir;
+      if (into > 0.05) {
+        ev.hit = Math.min(1, av / 25); R.v *= 0.35; R.wobble = 1;
+        if (dir > 0) {
+          const hh = C.h[R.idx]; let tx = -nz, tz = nx;
+          if (tx * Math.cos(hh) - tz * Math.sin(hh) < 0) { tx = -tx; tz = -tz; }
+          R.yaw += wrapA(Math.atan2(-tz, tx) - R.yaw);
+        }
+      }
+    }
   }
 
   // jumps
