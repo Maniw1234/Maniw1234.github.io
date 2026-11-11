@@ -14,7 +14,7 @@ const canvas = document.getElementById("scene");
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let PORTRAIT = innerWidth / innerHeight < 0.8;
 const LITE = innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
-const perf = { level: 0, t: 0, n: 0, slow: 0, wait: 2, js: 0, jn: 0, log: "" }; // speed governor, see governor() below
+const perf = { level: 0, max: 4, good: 0, ups: 0, t: 0, n: 0, slow: 0, wait: 2, js: 0, jn: 0, log: "" }; // speed governor, see governor() below
 
 let renderer;
 try {
@@ -927,7 +927,7 @@ if (canvas.dataset.model) loadBikeModel(canvas.dataset.model); else ready();
    After the page has loaded, the average frame time is checked every 1.2 s. Too slow, and the picture is drawn at a
    lower resolution (and the glow at a quarter of the pixels). The glow, motion trail and lamps always stay on. */
 function governor(raw) {
-  if (perf.level >= 5 || raw > 2.5) return; // a very long gap is a background tab, not a slow device
+  if (raw > 2.5) return; // a very long gap is a background tab, not a slow device
   const loading = !document.documentElement.classList.contains("is-loaded"); // loading is always a little slow: only act on hopeless
   if (perf.wait > 0) { perf.wait -= raw; return; }
   perf.t += raw; perf.n++; if (raw > 0.03) perf.slow++;
@@ -935,8 +935,14 @@ function governor(raw) {
   if (perf.t < 1.2 && perf.t / perf.n < 0.1) return; // six frames slower than ten a second are enough to know
   const ms = perf.t / perf.n * 1000, hitchy = perf.slow / perf.n > 0.12; perf.t = perf.n = perf.slow = 0;
   const limit = perf.level < 3 ? 22 : perf.level < 4 ? 34 : 50; // the glow is given up below about 45 frames a second; the steps after it only below 30, then 20
+  // the lowest step is given back when the computer turns out to cope (a busy moment, not a slow machine)
+  if (!loading && perf.level === 4 && perf.ups < 2 && ms < 19) { if (++perf.good >= 3) { perf.ups++; setPerf(3); perf.log += " back to 3"; } return; }
+  perf.good = 0;
+  if (perf.level >= perf.max) return;
   if (loading ? ms < 90 : ms < limit && !(hitchy && perf.level < 2)) return; // under about 52 frames a second, or more than one frame in eight late
-  setPerf(perf.level + (ms > 90 ? 3 : ms > 40 ? 2 : 1)); perf.wait = 2.5; perf.log += " " + perf.level + "@" + Math.round(ms) + "ms"; // far too slow: skip steps. Then let the change settle
+  setPerf(Math.min(perf.max, perf.level + (ms > 90 ? 3 : ms > 40 ? 2 : 1))); perf.wait = 2.5;
+  if (!loading && perf.level >= 3) try { localStorage.setItem("bike-step", String(Date.now())); } catch (e) {} // next visit starts without the glow
+  perf.log += " " + perf.level + "@" + Math.round(ms) + "ms"; // far too slow: skip steps. Then let the change settle
 }
 function setPerf(level) {
   perf.level = clamp(level, 0, 5); perf.wait = 2.5; perf.t = perf.n = perf.slow = 0; // a change is slow by itself: let it settle
@@ -950,15 +956,17 @@ try { localStorage.removeItem("bike-perf"); } catch (e) {} // older visits store
 try {
   const gl = renderer.getContext(), info = gl.getExtension("WEBGL_debug_renderer_info");
   const gpu = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-  if (/swiftshader|llvmpipe|softpipe|basic render|software/i.test(gpu)) setPerf(4); // no graphics card at work: the browser is drawing 3D on the processor
+  if (/swiftshader|llvmpipe|softpipe|basic render|software/i.test(gpu)) { perf.max = 5; setPerf(4); } // no graphics card at work: the browser is drawing 3D on the processor
   else if (!LITE && /intel|uhd|iris|radeon\(tm\) graphics|vega/i.test(gpu) && !/arc|rtx|gtx|\brx\b/i.test(gpu)) setPerf(1);
 } catch (e) {}
+// this computer needed the glow off on a visit in the last week: start there instead of stuttering until it is noticed again
+try { if (perf.level < 3 && Date.now() - +localStorage.getItem("bike-step") < 6048e5) { setPerf(3); perf.log += " remembered 3"; } } catch (e) {}
 
 /* ---------------- drive ---------------- */
 document.documentElement.classList.add("has-gl");
 // if the graphics driver drops the 3D view, fall back to the plain page instead of a frozen picture
 let lost = false;
-canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); lost = true; document.documentElement.classList.remove("has-gl"); document.documentElement.classList.add("gl-lost"); });
+canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); lost = true; perf.log += " 3D-view-lost"; document.documentElement.classList.remove("has-gl"); document.documentElement.classList.add("gl-lost"); });
 canvas.addEventListener("webglcontextrestored", () => location.reload());
 const clock = new THREE.Clock(), cover = document.querySelector("dialog.pview");
 let redraw = () => {}, skip = false, held = 0, lastInput = 0;
@@ -979,13 +987,12 @@ if (REDUCED) {
     if (document.hidden || (cover && cover.open)) return;
     // step 4 draws every other frame. Step 5 is for a computer that cannot draw 3D at any useful speed: the scene
     // holds still while the page is being scrolled, so the page itself stays smooth, and ticks over slowly otherwise
-    if (perf.level === 4 && (skip = !skip) && raw < 0.03) { held += raw; return; }
     if (perf.level >= 5) {
       const now = performance.now(), busy = now - Math.max(lastScroll, lastInput) < 3000 || t < 12 || extra.garage;
       if (now - lastScroll < 220 || held + raw < 0.2 || !busy) { held = busy ? held + raw : 0; return; }
     }
     const real = raw + held; held = 0;
-    const j0 = performance.now(); renderer.info.reset(); frame(t, Math.min(real, 0.05), smoothP); perf.js += performance.now() - j0; perf.jn++; governor(perf.level === 4 ? raw : real);
+    const j0 = performance.now(); renderer.info.reset(); frame(t, Math.min(real, 0.05), smoothP); perf.js += performance.now() - j0; perf.jn++; governor(real);
   })();
 }
 // add ?perf to the address to see what this computer is doing: frames a second, quality step, graphics chip
