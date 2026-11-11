@@ -45,8 +45,8 @@ function glowTexture() {
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64); g.addColorStop(0, "rgba(255,255,255,1)"); g.addColorStop(0.2, "rgba(255,255,255,.5)"); g.addColorStop(1, "rgba(255,255,255,0)");
   x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
 }
-const GLOW = glowTexture();
-const sprite = (color, size, opacity) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false })); s.scale.setScalar(size); return s; };
+const GLOW = glowTexture(), glows = []; // every soft glow, so the faded-out ones can be left undrawn
+const sprite = (color, size, opacity) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false })); s.scale.setScalar(size); glows.push(s); return s; };
 function paintGradient(geo, dir) {
   const p = geo.attributes.position, v = new THREE.Vector3(); let mn = Infinity, mx = -Infinity;
   for (let i = 0; i < p.count; i++) { const d = v.fromBufferAttribute(p, i).dot(dir); mn = Math.min(mn, d); mx = Math.max(mx, d); }
@@ -845,6 +845,7 @@ function frame(t, dt, p) {
   flash *= 0.85; if (flashEl) flashEl.style.opacity = flash.toFixed(3);
 
   audioTick(S);
+  for (const g of glows) g.visible = g.material.opacity > 0.004; // a see-through glow still costs its whole area to draw
   if (perf.level >= 3) renderer.render(scene, camera); else composer.render(dt); // the lowest steps skip the glow passes
   firstFrame = false;
   lastState = S;
