@@ -934,7 +934,8 @@ function governor(raw) {
   if (perf.t < 1.2 && perf.n < 6) return;
   if (perf.t < 1.2 && perf.t / perf.n < 0.1) return; // six frames slower than ten a second are enough to know
   const ms = perf.t / perf.n * 1000, hitchy = perf.slow / perf.n > 0.12; perf.t = perf.n = perf.slow = 0;
-  if (loading ? ms < 90 : ms < 19 && !(hitchy && perf.level < 2)) return; // under about 52 frames a second, or more than one frame in eight late
+  const limit = perf.level < 3 ? 22 : perf.level < 4 ? 34 : 50; // the glow is given up below about 45 frames a second; the steps after it only below 30, then 20
+  if (loading ? ms < 90 : ms < limit && !(hitchy && perf.level < 2)) return; // under about 52 frames a second, or more than one frame in eight late
   setPerf(perf.level + (ms > 90 ? 3 : ms > 40 ? 2 : 1)); perf.wait = 2.5; perf.log += " " + perf.level + "@" + Math.round(ms) + "ms"; // far too slow: skip steps. Then let the change settle
 }
 function setPerf(level) {
