@@ -325,8 +325,8 @@ html:not(.js) .sec, html:not(.js) .pin { min-height: 0; position: static; }
 .socials:empty { display: none; }
 
 /* ---------- full-screen project view ---------- */
-.pview { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; color: var(--ink); background: rgba(4, 5, 10, .94); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
-.pview::backdrop { background: rgba(0, 0, 0, .6); backdrop-filter: blur(6px); }
+.pview { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; color: var(--ink); background: #04050a; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.pview::backdrop { background: #04050a; }
 .pview[open] { animation: pv-in .45s cubic-bezier(.2, .8, .2, 1); }
 @keyframes pv-in { from { opacity: 0; transform: translateY(30px) scale(.98); } }
 .pview__top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 12px var(--pad); background: rgba(4, 5, 10, .97); border-bottom: 1px solid var(--line); }

@@ -948,7 +948,7 @@ document.documentElement.classList.add("has-gl");
 let lost = false;
 canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); lost = true; document.documentElement.classList.remove("has-gl"); document.documentElement.classList.add("gl-lost"); });
 canvas.addEventListener("webglcontextrestored", () => location.reload());
-const clock = new THREE.Clock();
+const clock = new THREE.Clock(), cover = document.querySelector("dialog.pview");
 let redraw = () => {};
 if (REDUCED) {
   const still = () => { firstFrame = true; ignite = 1; frame(1.2, 1 / 60, 0); };
@@ -961,7 +961,9 @@ if (REDUCED) {
     // progress follows real time (not the capped dt) so a slow device still lands on schedule
     const follow = document.documentElement.classList.contains("quick-ride") ? 10 : 5; // nav shortcuts play the stunts fast
     smoothP += (scrollP - smoothP) * (1 - Math.exp(-Math.min(raw, 0.25) * follow));
-    if (!document.hidden) { frame(t, dt, smoothP); governor(raw); }
+    // a full-screen project covers the scene: drawing it underneath only slows the project view down, and the slow
+    // frames would make the governor lower the picture quality for the rest of the visit
+    if (!document.hidden && !(cover && cover.open)) { frame(t, dt, smoothP); governor(raw); }
   })();
 }
 window.__bike = {
