@@ -14,7 +14,7 @@ const canvas = document.getElementById("scene");
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let PORTRAIT = innerWidth / innerHeight < 0.8;
 const LITE = innerWidth < 760 || (navigator.hardwareConcurrency || 8) <= 4;
-const perf = { level: 0, t: 0, n: 0, slow: 0, wait: 2 }; // speed governor, see governor() below
+const perf = { level: 0, t: 0, n: 0, slow: 0, wait: 2, js: 0, jn: 0, log: "" }; // speed governor, see governor() below
 
 let renderer;
 try {
@@ -25,6 +25,7 @@ try {
 renderer.setPixelRatio(LITE ? 1 : Math.min(devicePixelRatio, 1.75));
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
+renderer.info.autoReset = false; // counted per frame across all the passes, for the ?perf readout
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x04050a);
@@ -933,12 +934,12 @@ function governor(raw) {
   if (perf.t < 1.2 && perf.n < 6) return;
   if (perf.t < 1.2 && perf.t / perf.n < 0.1) return; // six frames slower than ten a second are enough to know
   const ms = perf.t / perf.n * 1000, hitchy = perf.slow / perf.n > 0.12; perf.t = perf.n = perf.slow = 0;
-  if (loading ? ms < 90 : ms < 19 && !hitchy) return; // under about 52 frames a second, or more than one frame in eight late
-  setPerf(perf.level + (ms > 90 ? 3 : ms > 40 ? 2 : 1)); perf.wait = 0.8; // far too slow: skip steps
+  if (loading ? ms < 90 : ms < 19 && !(hitchy && perf.level < 2)) return; // under about 52 frames a second, or more than one frame in eight late
+  setPerf(perf.level + (ms > 90 ? 3 : ms > 40 ? 2 : 1)); perf.wait = 2.5; perf.log += " " + perf.level + "@" + Math.round(ms) + "ms"; // far too slow: skip steps. Then let the change settle
 }
 function setPerf(level) {
-  perf.level = clamp(level, 0, 5);
-  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : [1, Math.min(devicePixelRatio, 1), 0.8, 0.6, 0.4, 0.4][perf.level]);
+  perf.level = clamp(level, 0, 5); perf.wait = 2.5; perf.t = perf.n = perf.slow = 0; // a change is slow by itself: let it settle
+  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : [1, Math.min(devicePixelRatio, 1), 0.8, 0.75, 0.6, 0.6][perf.level]);
   resize();
 }
 try { localStorage.removeItem("bike-perf"); } catch (e) {} // older visits stored a lower-effects level; start full every time
@@ -959,7 +960,8 @@ let lost = false;
 canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); lost = true; document.documentElement.classList.remove("has-gl"); document.documentElement.classList.add("gl-lost"); });
 canvas.addEventListener("webglcontextrestored", () => location.reload());
 const clock = new THREE.Clock(), cover = document.querySelector("dialog.pview");
-let redraw = () => {}, skip = false, held = 0;
+let redraw = () => {}, skip = false, held = 0, lastInput = 0;
+for (const ev of ["pointerdown", "keydown", "wheel", "touchstart"]) addEventListener(ev, () => { lastInput = performance.now(); }, { passive: true });
 if (REDUCED) {
   const still = () => { firstFrame = true; ignite = 1; frame(1.2, 1 / 60, 0); };
   still(); addEventListener("resize", still); redraw = still;
@@ -977,9 +979,12 @@ if (REDUCED) {
     // step 4 draws every other frame. Step 5 is for a computer that cannot draw 3D at any useful speed: the scene
     // holds still while the page is being scrolled, so the page itself stays smooth, and ticks over slowly otherwise
     if (perf.level === 4 && (skip = !skip) && raw < 0.03) { held += raw; return; }
-    if (perf.level >= 5 && (performance.now() - lastScroll < 220 || held + raw < 0.2)) { held += raw; return; }
+    if (perf.level >= 5) {
+      const now = performance.now(), busy = now - Math.max(lastScroll, lastInput) < 3000 || t < 12 || extra.garage;
+      if (now - lastScroll < 220 || held + raw < 0.2 || !busy) { held = busy ? held + raw : 0; return; }
+    }
     const real = raw + held; held = 0;
-    frame(t, Math.min(real, 0.05), smoothP); governor(perf.level === 4 ? raw : real);
+    const j0 = performance.now(); renderer.info.reset(); frame(t, Math.min(real, 0.05), smoothP); perf.js += performance.now() - j0; perf.jn++; governor(perf.level === 4 ? raw : real);
   })();
 }
 // add ?perf to the address to see what this computer is doing: frames a second, quality step, graphics chip
@@ -991,8 +996,8 @@ if (/[?&]perf\b/.test(location.search)) {
   (function tick(now) {
     requestAnimationFrame(tick); n++; worst = Math.max(worst, now - last); last = now;
     if (now - mark < 1000) return;
-    box.textContent = Math.round(n * 1000 / (now - mark)) + " fps, worst frame " + Math.round(worst) + " ms\nquality step " + perf.level + " of 5 (0 is full)" + (LITE ? ", lite" : "") + "\npicture " + canvas.width + "x" + canvas.height + ", window " + innerWidth + "x" + innerHeight + " @" + devicePixelRatio + "\ncores " + (navigator.hardwareConcurrency || "?") + "\n" + gpu;
-    n = 0; worst = 0; mark = now;
+    box.textContent = Math.round(n * 1000 / (now - mark)) + " fps, worst frame " + Math.round(worst) + " ms\nquality step " + perf.level + " of 5 (0 is full)" + (LITE ? ", lite" : "") + "\npicture " + canvas.width + "x" + canvas.height + ", window " + innerWidth + "x" + innerHeight + " @" + devicePixelRatio + "\nscript " + (perf.js / Math.max(1, perf.jn)).toFixed(1) + " ms a frame, " + renderer.info.render.calls + " draws, " + renderer.info.render.triangles + " triangles\nsteps taken:" + (perf.log || " none") + "\ncores " + (navigator.hardwareConcurrency || "?") + "\n" + gpu;
+    n = 0; worst = 0; mark = now; perf.js = perf.jn = 0;
   })(last);
 }
 window.__bike = {
