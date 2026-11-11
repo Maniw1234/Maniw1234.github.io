@@ -844,7 +844,7 @@ function frame(t, dt, p) {
   flash *= 0.85; if (flashEl) flashEl.style.opacity = flash.toFixed(3);
 
   audioTick(S);
-  composer.render(dt);
+  if (perf.level >= 3) renderer.render(scene, camera); else composer.render(dt); // the lowest steps skip the glow passes
   firstFrame = false;
   lastState = S;
   return S;
@@ -926,18 +926,19 @@ if (canvas.dataset.model) loadBikeModel(canvas.dataset.model); else ready();
    After the page has loaded, the average frame time is checked every 1.2 s. Too slow, and the picture is drawn at a
    lower resolution (and the glow at a quarter of the pixels). The glow, motion trail and lamps always stay on. */
 function governor(raw) {
-  if (perf.level >= 2 || raw > 0.5) return; // a long gap is a background tab, not a slow device
-  if (!document.documentElement.classList.contains("is-loaded")) return; // loading is always slow; judge the ride
+  if (perf.level >= 5 || raw > 2.5) return; // a very long gap is a background tab, not a slow device
+  const loading = !document.documentElement.classList.contains("is-loaded"); // loading is always a little slow: only act on hopeless
   if (perf.wait > 0) { perf.wait -= raw; return; }
   perf.t += raw; perf.n++; if (raw > 0.03) perf.slow++;
-  if (perf.t < 1.2) return;
+  if (perf.t < 1.2 && perf.n < 6) return;
+  if (perf.t < 1.2 && perf.t / perf.n < 0.1) return; // six frames slower than ten a second are enough to know
   const ms = perf.t / perf.n * 1000, hitchy = perf.slow / perf.n > 0.12; perf.t = perf.n = perf.slow = 0;
-  if (ms < 19 && !hitchy) return; // under about 52 frames a second, or more than one frame in eight late
-  setPerf(perf.level + 1); perf.wait = 0.8;
+  if (loading ? ms < 90 : ms < 19 && !hitchy) return; // under about 52 frames a second, or more than one frame in eight late
+  setPerf(perf.level + (ms > 90 ? 3 : ms > 40 ? 2 : 1)); perf.wait = 0.8; // far too slow: skip steps
 }
 function setPerf(level) {
-  perf.level = clamp(level, 0, 2);
-  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : perf.level === 1 ? Math.min(devicePixelRatio, 1) : 0.8);
+  perf.level = clamp(level, 0, 5);
+  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : [1, Math.min(devicePixelRatio, 1), 0.8, 0.6, 0.4, 0.4][perf.level]);
   resize();
 }
 try { localStorage.removeItem("bike-perf"); } catch (e) {} // older visits stored a lower-effects level; start full every time
@@ -947,7 +948,8 @@ try { localStorage.removeItem("bike-perf"); } catch (e) {} // older visits store
 try {
   const gl = renderer.getContext(), info = gl.getExtension("WEBGL_debug_renderer_info");
   const gpu = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-  if (!LITE && /intel|uhd|iris|radeon\(tm\) graphics|vega|swiftshader|llvmpipe|basic render/i.test(gpu) && !/arc|rtx|gtx|\brx\b/i.test(gpu)) setPerf(1);
+  if (/swiftshader|llvmpipe|softpipe|basic render|software/i.test(gpu)) setPerf(4); // no graphics card at work: the browser is drawing 3D on the processor
+  else if (!LITE && /intel|uhd|iris|radeon\(tm\) graphics|vega/i.test(gpu) && !/arc|rtx|gtx|\brx\b/i.test(gpu)) setPerf(1);
 } catch (e) {}
 
 /* ---------------- drive ---------------- */
@@ -957,7 +959,7 @@ let lost = false;
 canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); lost = true; document.documentElement.classList.remove("has-gl"); document.documentElement.classList.add("gl-lost"); });
 canvas.addEventListener("webglcontextrestored", () => location.reload());
 const clock = new THREE.Clock(), cover = document.querySelector("dialog.pview");
-let redraw = () => {};
+let redraw = () => {}, skip = false, held = 0;
 if (REDUCED) {
   const still = () => { firstFrame = true; ignite = 1; frame(1.2, 1 / 60, 0); };
   still(); addEventListener("resize", still); redraw = still;
@@ -971,11 +973,31 @@ if (REDUCED) {
     smoothP += (scrollP - smoothP) * (1 - Math.exp(-Math.min(raw, 0.25) * follow));
     // a full-screen project covers the scene: drawing it underneath only slows the project view down, and the slow
     // frames would make the governor lower the picture quality for the rest of the visit
-    if (!document.hidden && !(cover && cover.open)) { frame(t, dt, smoothP); governor(raw); }
+    if (document.hidden || (cover && cover.open)) return;
+    // step 4 draws every other frame. Step 5 is for a computer that cannot draw 3D at any useful speed: the scene
+    // holds still while the page is being scrolled, so the page itself stays smooth, and ticks over slowly otherwise
+    if (perf.level === 4 && (skip = !skip) && raw < 0.03) { held += raw; return; }
+    if (perf.level >= 5 && (performance.now() - lastScroll < 220 || held + raw < 0.2)) { held += raw; return; }
+    const real = raw + held; held = 0;
+    frame(t, Math.min(real, 0.05), smoothP); governor(perf.level === 4 ? raw : real);
   })();
+}
+// add ?perf to the address to see what this computer is doing: frames a second, quality step, graphics chip
+if (/[?&]perf\b/.test(location.search)) {
+  const box = document.createElement("div"); let n = 0, worst = 0, last = performance.now(), mark = last, gpu = "?";
+  box.style.cssText = "position:fixed;left:8px;bottom:8px;z-index:99999;padding:8px 10px;background:#000c;color:#fff;font:12px/1.5 monospace;border-radius:6px;pointer-events:none;max-width:92vw;white-space:pre-wrap";
+  try { const gl = renderer.getContext(), i = gl.getExtension("WEBGL_debug_renderer_info"); gpu = String(i ? gl.getParameter(i.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)); } catch (e) {}
+  document.body.appendChild(box);
+  (function tick(now) {
+    requestAnimationFrame(tick); n++; worst = Math.max(worst, now - last); last = now;
+    if (now - mark < 1000) return;
+    box.textContent = Math.round(n * 1000 / (now - mark)) + " fps, worst frame " + Math.round(worst) + " ms\nquality step " + perf.level + " of 5 (0 is full)" + (LITE ? ", lite" : "") + "\npicture " + canvas.width + "x" + canvas.height + ", window " + innerWidth + "x" + innerHeight + " @" + devicePixelRatio + "\ncores " + (navigator.hardwareConcurrency || "?") + "\n" + gpu;
+    n = 0; worst = 0; mark = now;
+  })(last);
 }
 window.__bike = {
   paints: Object.keys(PAINTS),
+  perf: (n) => { if (n != null) setPerf(n); return perf.level; },
   paint: (name) => { const ok = setPaint(name); if (REDUCED) redraw(); return ok; },
   day: (on) => { extra.dayWant = on ? 1 : 0; if (REDUCED) { extra.day = extra.dayWant; redraw(); } },
   garage: (on) => { extra.garage = !!on; },
