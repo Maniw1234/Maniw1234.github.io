@@ -39,6 +39,12 @@ content:
         label: Screenshots (shown in the 3D carousel)
         type: image
         list: true
+      - name: video
+        label: Video (a short MP4; it plays silently and loops)
+        type: file
+      - name: poster
+        label: Video poster (the picture shown before it plays)
+        type: image
       - name: github
         label: GitHub link
         type: string

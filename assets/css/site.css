@@ -340,10 +340,14 @@ html:not(.js) .sec, html:not(.js) .pin { min-height: 0; position: static; }
 .pview .pfull__title { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .pfull__tag { margin-top: 14px; max-width: 46em; color: var(--muted); font-size: clamp(16px, 1.5vw, 19px); }
 
+/* the project's film */
+.pfilm { margin: 30px 0 0; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); background: #000; box-shadow: 0 40px 90px -40px rgba(0, 0, 0, .9); }
+.pfilm video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+
 /* 3D screenshot carousel */
-.gallery { touch-action: pan-y; position: relative; height: clamp(240px, 42vw, 420px); margin: 34px 0 10px; perspective: 1400px; }
+.gallery { touch-action: pan-y; position: relative; height: clamp(250px, 46vw, 540px); margin: 34px 0 10px; perspective: 1400px; }
 .gallery__ring { position: absolute; inset: 0; transform-style: preserve-3d; }
-.shot { position: absolute; left: 50%; top: 50%; width: clamp(200px, 34vw, 400px); aspect-ratio: 16 / 10; margin: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #0b0d16; box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .9); touch-action: pan-y; }
+.shot { position: absolute; left: 50%; top: 50%; width: clamp(240px, 54vw, 720px); aspect-ratio: 16 / 10; margin: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #0b0d16; box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .9); touch-action: pan-y; }
 .shot img { width: 100%; height: 100%; object-fit: cover; }
 html:not(.js) .gallery { height: auto; display: flex; gap: 10px; flex-wrap: wrap; }
 html:not(.js) .shot { position: static; width: 220px; }

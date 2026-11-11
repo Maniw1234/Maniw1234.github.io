@@ -331,6 +331,16 @@
     var frag = document.createDocumentFragment();
     var h = el("h2", "pfull__title", p.title); h.id = "pview-title"; frag.appendChild(h);
     if (p.summary) frag.appendChild(el("p", "pfull__tag", p.summary));
+    // a short film of the project, when it has one: it plays by itself, silent, and loops (controls to pause it)
+    var film = sitePath(p.video);
+    if (film) {
+      var fw = el("div", "pfilm"), v = document.createElement("video");
+      v.src = film; v.muted = true; v.loop = true; v.autoplay = !REDUCED; v.controls = true; v.playsInline = true;
+      v.setAttribute("playsinline", ""); v.setAttribute("preload", "metadata");
+      var poster = sitePath(p.poster); if (poster) v.poster = poster;
+      v.setAttribute("aria-label", p.title + " in action");
+      fw.appendChild(v); frag.appendChild(fw);
+    }
     var shots = (Array.isArray(p.screenshots) ? p.screenshots : []).map(sitePath).filter(Boolean);
     if (shots.length) {
       var g = el("div", "gallery"); g.setAttribute("data-gallery", "");

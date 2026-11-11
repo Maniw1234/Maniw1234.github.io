@@ -4,17 +4,52 @@
     "published": true,
     "summary": "Throw files from your phone to your PC with a flick. Fast, private, no cables.",
     "description": "Flick sends files between your Android phone and your computer with a flick of your finger. Flick a photo off the edge of the phone's screen, toward your PC, and it lands there. Send files from the PC back to the phone the same way, or from one phone to another.\n\nIt also shares the clipboard and links, shows your phone's notifications on your PC, keeps folders in sync, and works as a media remote.\n\nFiles go straight from one device to the other over Wi-Fi, USB, a hotspot or Bluetooth, encrypted, with no account, no ads and no cloud. Flick is free and open source.",
-    "tags": ["Android", "Windows", "Mac", "Linux", "Electron", "Open source"],
+    "tags": [
+      "Android",
+      "Windows",
+      "Mac",
+      "Linux",
+      "Electron",
+      "Open source"
+    ],
     "cover": "assets/uploads/flick-cover.png",
-    "screenshots": [],
+    "screenshots": [
+      "assets/uploads/flick-1-flick.jpg",
+      "assets/uploads/flick-2-pair.jpg",
+      "assets/uploads/flick-3-send.jpg",
+      "assets/uploads/flick-4-more.jpg",
+      "assets/uploads/flick-5-private.jpg"
+    ],
     "github": "https://github.com/Maniw1234/flick",
-    "website": "",
+    "website": "https://maniw1234.github.io/flick.html",
     "downloads": [
-      { "label": "Windows (.exe)", "file": "", "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-Setup.exe" },
-      { "label": "Mac, Apple silicon (.dmg)", "file": "", "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-mac-arm64.dmg" },
-      { "label": "Mac, Intel (.dmg)", "file": "", "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-mac-x64.dmg" },
-      { "label": "Linux (.AppImage)", "file": "", "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-linux-x86_64.AppImage" },
-      { "label": "Android (.apk)", "file": "", "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick.apk" }
-    ]
+      {
+        "label": "Windows (.exe)",
+        "file": "",
+        "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-Setup.exe"
+      },
+      {
+        "label": "Mac, Apple silicon (.dmg)",
+        "file": "",
+        "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-mac-arm64.dmg"
+      },
+      {
+        "label": "Mac, Intel (.dmg)",
+        "file": "",
+        "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-mac-x64.dmg"
+      },
+      {
+        "label": "Linux (.AppImage)",
+        "file": "",
+        "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick-linux-x86_64.AppImage"
+      },
+      {
+        "label": "Android (.apk)",
+        "file": "",
+        "url": "https://github.com/Maniw1234/flick/releases/latest/download/Flick.apk"
+      }
+    ],
+    "video": "assets/uploads/flick-hero.mp4",
+    "poster": "assets/uploads/flick-hero.jpg"
   }
 ]
