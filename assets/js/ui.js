@@ -19,13 +19,24 @@
     if (text != null) n.textContent = text;
     return n;
   }
-  // Only web links, mail links and paths inside this site
+  // An image or file: an upload on this site (any file name works) or a full web address
+  function sitePath(u) {
+    u = String(u || "").trim();
+    if (/^https?:\/\//i.test(u)) return u;
+    if (!u || u.indexOf("..") !== -1 || /^\/\//.test(u) || /^[a-z][a-z0-9+.\-]*:/i.test(u)) return "";
+    try { u = decodeURI(u); } catch (e) {}
+    return encodeURI(u.replace(/^\/+/, ""));
+  }
+  // A link: web and mail links, or a file on this site. A web address typed without https://
+  // (github.com/..., www.example.com) gets it added, and a bare email address becomes a mail link.
   function safeUrl(u) {
+    u = String(u || "").trim();
     if (!u) return "";
-    u = String(u).trim();
     if (/^(https?:\/\/|mailto:)/i.test(u)) return u;
-    if (/^\/?[\w.\-\/% ]+$/.test(u) && u.indexOf("..") === -1) return u.replace(/^\//, "");
-    return "";
+    if (/^\/\//.test(u)) return "https:" + u;
+    if (/^[^\s@\/:]+@[^\s@\/:]+\.[a-z]{2,}$/i.test(u)) return "mailto:" + u;
+    if (!/^assets\//i.test(u) && /^[^\/\s:]+\.[a-z]{2,}(?:[\/?#]|$)/i.test(u)) return "https://" + u;
+    return sitePath(u);
   }
   function slugify(s, i) {
     var x = String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -225,6 +236,7 @@
     if (!stepping() || e.altKey || e.ctrlKey || e.metaKey) return;
     var tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
+    if (e.key === " " && e.target.closest && e.target.closest("button, a, summary, [role=radio]")) return; // Space presses the focused button
     var down = e.key === "ArrowDown" || e.key === "PageDown" || (e.key === " " && !e.shiftKey);
     var up = e.key === "ArrowUp" || e.key === "PageUp" || (e.key === " " && e.shiftKey);
     if (down || up) { e.preventDefault(); stepBy(down ? 1 : -1); }
@@ -292,7 +304,7 @@
   function card(p, i) {
     var c = el("article", "pcard"), acc = ACCENTS[i % ACCENTS.length];
     c.id = p._id; c.style.setProperty("--a1", acc[0]); c.style.setProperty("--a2", acc[1]);
-    var cover = safeUrl(p.cover);
+    var cover = sitePath(p.cover);
     if (cover) {
       var fig = el("div", "pcard__cover"), img = el("img"); img.src = cover; img.alt = ""; img.loading = "lazy"; fig.appendChild(img); c.appendChild(fig);
     } else {
@@ -301,8 +313,9 @@
     c.appendChild(el("p", "pcard__n", String(i + 1).padStart(2, "0")));
     c.appendChild(el("h3", "pcard__t", p.title));
     if (p.summary) c.appendChild(el("p", "pcard__s", p.summary));
-    if (Array.isArray(p.tags) && p.tags.length) {
-      var ul = el("ul", "tags"); p.tags.filter(Boolean).forEach(function (t) { ul.appendChild(el("li", null, t)); }); c.appendChild(ul);
+    var tags = (Array.isArray(p.tags) ? p.tags : []).filter(Boolean);
+    if (tags.length) {
+      var ul = el("ul", "tags"); tags.forEach(function (t) { ul.appendChild(el("li", null, t)); }); c.appendChild(ul);
     }
     var open = el("a", "btn btn--primary pcard__open", "Open project"); open.href = "#" + p._id; open.dataset.index = String(i);
     c.appendChild(open);
@@ -318,7 +331,7 @@
     var frag = document.createDocumentFragment();
     var h = el("h2", "pfull__title", p.title); h.id = "pview-title"; frag.appendChild(h);
     if (p.summary) frag.appendChild(el("p", "pfull__tag", p.summary));
-    var shots = (Array.isArray(p.screenshots) ? p.screenshots : []).map(safeUrl).filter(Boolean);
+    var shots = (Array.isArray(p.screenshots) ? p.screenshots : []).map(sitePath).filter(Boolean);
     if (shots.length) {
       var g = el("div", "gallery"); g.setAttribute("data-gallery", "");
       shots.forEach(function (src, k) {
@@ -332,16 +345,17 @@
       String(p.description).split(/\n\s*\n/).forEach(function (para) { if (para.trim()) d.appendChild(el("p", null, para.trim())); });
       grid.appendChild(d);
     }
-    if (Array.isArray(p.tags) && p.tags.length) {
+    var tags = (Array.isArray(p.tags) ? p.tags : []).filter(Boolean);
+    if (tags.length) {
       var t = el("div", "d-block"); t.appendChild(el("h3", null, "Built with"));
-      var ul = el("ul", "tags tags--lg"); p.tags.filter(Boolean).forEach(function (x) { ul.appendChild(el("li", null, x)); }); t.appendChild(ul);
+      var ul = el("ul", "tags tags--lg"); tags.forEach(function (x) { ul.appendChild(el("li", null, x)); }); t.appendChild(ul);
       grid.appendChild(t);
     }
     if (grid.children.length) frag.appendChild(grid);
     var box = el("div", "pfull__links"); box.appendChild(el("h3", null, "Links & downloads"));
     var row = el("div", "links"), gh = safeUrl(p.github), web = safeUrl(p.website);
     (Array.isArray(p.downloads) ? p.downloads : []).forEach(function (dl) {
-      var file = safeUrl(dl && dl.file), url = safeUrl(dl && dl.url), href = file || url;
+      var file = sitePath(dl && dl.file), url = safeUrl(dl && dl.url), href = file || url;
       if (href) row.appendChild(linkBtn((dl.label || "Download"), href, true, !!file));
     });
     if (web) row.appendChild(linkBtn("Open live", web, !row.children.length));
@@ -353,7 +367,12 @@
   }
   function renderProjects(list) {
     projects = list.filter(function (p) { return p && p.title && p.published !== false; });
-    projects.forEach(function (p, i) { p._id = slugify(p.title, i); });
+    var used = {};
+    projects.forEach(function (p, i) { // two projects with the same title still get their own link
+      var id = slugify(p.title, i), base = id, n = 2;
+      while (used[id]) id = base + "-" + n++;
+      used[id] = true; p._id = id;
+    });
     if (!projects.length || !rail) return;
     rail.innerHTML = "";
     projects.forEach(function (p, i) { rail.appendChild(card(p, i)); });
@@ -397,6 +416,7 @@
       g.addEventListener("pointerdown", function (e) { drag = { x: e.clientX, c: cur }; g.setPointerCapture(e.pointerId); });
       g.addEventListener("pointermove", function (e) { if (drag) cur = drag.c - (e.clientX - drag.x) / (shots[0].getBoundingClientRect().width || 360); });
       g.addEventListener("pointerup", function () { drag = null; });
+      g.addEventListener("pointercancel", function () { drag = null; }); // a phone took the touch over (scrolling)
     }
     draw(); if (vel) spinRaf = requestAnimationFrame(spin);
   }
@@ -523,7 +543,7 @@
     var typed = "", taps = [];
     document.addEventListener("keydown", function (e) {
       var tag = (e.target.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || e.target.isContentEditable || e.key.length !== 1) return;
+      if (tag === "input" || tag === "textarea" || e.target.isContentEditable || !e.key || e.key.length !== 1) return;
       typed = (typed + e.key.toLowerCase()).slice(-5);
       if (typed === "vroom") { typed = ""; bike.wheelie(); }
     });

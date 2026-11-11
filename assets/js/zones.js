@@ -455,7 +455,7 @@ export function buildZones(E) {
 
   // 10 · The Stadium: grandstands, crowd flashes, floodlights and fireworks to the finish
   B.stadium = (zn, zi) => {
-    const fin = zn.e - 700, stands = [], crowd = [], floods = [];
+    const fin = zn.e - 700, stands = [], floods = [];
     for (const sd of [-1, 1]) for (let s = fin; s < zn.e + 20; s += 20) for (let tier = 0; tier < 6; tier++) { const p = at(C, s, sd * (HALF + 7 + tier * 3)); stands.push({ x: p[0], z: p[1], y: tier * 2.2, rot: C.h[Math.min(C.N - 1, s)] }); if (tier === 0) solid(p[0], p[1], 2.5, 20); }
     add(new THREE.BoxGeometry(20.5, 2.2, 3.2).translate(0, 1.1, 0), std({ color: 0x23262f, roughness: 0.8 }), stands, (o, d) => { d.position.set(o.x, o.y, o.z); d.rotation.y = o.rot; });
     const n = thin(3000), pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
