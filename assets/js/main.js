@@ -934,7 +934,7 @@ function governor(raw) {
   if (perf.t < 1.2 && perf.n < 6) return;
   if (perf.t < 1.2 && perf.t / perf.n < 0.1) return; // six frames slower than ten a second are enough to know
   const ms = perf.t / perf.n * 1000, hitchy = perf.slow / perf.n > 0.12; perf.t = perf.n = perf.slow = 0;
-  const limit = perf.level < 3 ? 22 : perf.level < 4 ? 34 : 50; // the glow is given up below about 45 frames a second; the steps after it only below 30, then 20
+  const limit = perf.level < 3 ? 22 : perf.level < 4 ? 26 : 50; // the glow is given up below about 45 frames a second; the steps after it only below 30, then 20
   // the lowest step is given back when the computer turns out to cope (a busy moment, not a slow machine)
   if (!loading && perf.level === 4 && perf.ups < 2 && ms < 19) { if (++perf.good >= 3) { perf.ups++; setPerf(3); perf.log += " back to 3"; } return; }
   perf.good = 0;
@@ -946,7 +946,7 @@ function governor(raw) {
 }
 function setPerf(level) {
   perf.level = clamp(level, 0, 5); perf.wait = 2.5; perf.t = perf.n = perf.slow = 0; // a change is slow by itself: let it settle
-  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : [1, Math.min(devicePixelRatio, 1), 0.8, 0.75, 0.6, 0.6][perf.level]);
+  renderer.setPixelRatio(perf.level === 0 ? renderer.getPixelRatio() : [1, Math.min(devicePixelRatio, 1), 0.8, Math.min(devicePixelRatio, 1), 0.8, 0.6][perf.level]);
   resize();
 }
 try { localStorage.removeItem("bike-perf"); } catch (e) {} // older visits stored a lower-effects level; start full every time
