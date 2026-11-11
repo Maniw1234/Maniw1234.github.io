@@ -113,7 +113,7 @@ function locate(C, px, pz, hint, wide) {
 }
 
 /* ---------------- handling ---------------- */
-export const TUNE = { vmax: 74, vnitro: 90, acc: 13, nitroAcc: 9, brake: 26, grip: 110, offMax: 28, g: 20, flip: 5.4, spin: 6.8 };
+export const TUNE = { vmax: 74, vnitro: 90, acc: 13, nitroAcc: 9, brake: 26, grip: 95, offMax: 28, g: 20, flip: 5.4, spin: 6.8 };
 
 export function newRider(C, s = 4) {
   const p = at(C, s);
@@ -137,7 +137,7 @@ export function step(C, R, input, dt) {
   R.clock += dt;
   // on the ground the keys ride the bike; in the air they throw tricks (W/S flip, A/D spin)
   const steerIn = R.air ? 0 : input.left - input.right;
-  R.steer += (steerIn - R.steer) * (1 - Math.exp(-dt * 7));
+  R.steer += (steerIn - R.steer) * (1 - Math.exp(-dt * (steerIn ? 4 : 7))); // leans in progressively, straightens up quickly
   const v = R.v, av = Math.abs(v);
   R.off = Math.abs(R.lat) > HALF + 0.4 && !R.air;
   R.boosting = !!input.nitro && R.nitro > 0.01 && v > 2;
@@ -157,7 +157,7 @@ export function step(C, R, input, dt) {
   R.v = Math.abs(nv) < 0.05 && !input.up && !input.down ? 0 : (Math.sign(nv) !== Math.sign(v) && v !== 0 && !input.down && !input.up ? 0 : nv);
   R.wobble = Math.max(0, R.wobble - dt);
   // turning: lean follows the turn the way a real bike leans into it. A tap turns gently; holding the key
-  // lays the bike right over, knee on the floor, tight enough for the sharpest corner at full speed.
+  // lays the bike right over, knee on the floor; ease off the gas a little for the sharpest corners.
   const turnMax = Math.min(2.1, T.grip / Math.max(av, 1)) * smooth01(av / 3);
   const yawRate = R.steer * (0.3 + 0.7 * R.steer * R.steer) * turnMax * Math.sign(R.v || 1);
   R.yaw += yawRate * dt + (R.wobble > 0 ? Math.sin(R.clock * 19) * 0.25 * dt * R.wobble : 0);

@@ -155,21 +155,17 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
       vec4 night = vec4(c * fade, ((g * 0.6 + edge + dash + road * 0.6) * on + front * (g * 2. + 0.2)) * fade);
       gl_FragColor = night;
       if (uDay > 0.001) {
-      // day: a polished pale plaza with the neon grid set into it as coloured inlays, a glossy dark road that
-      // mirrors the sky, and the sun glinting off it; it all hazes into the sky
-      float n = fract(sin(dot(floor(p * 3.), vec2(12.9898, 78.233))) * 43758.5453);
-      vec3 concrete = vec3(0.31, 0.3, 0.29) * (0.93 + 0.07 * n) * (1. - 0.2 * max(line(p.x / 4., 1.), line(p.y / 4., 1.)));
-      vec3 asphalt = vec3(0.03, 0.032, 0.04) * (0.92 + 0.12 * n);
+      // day: a black mirror floor under the golden sky. The neon grid stays lit in the brand colours, the road
+      // edges glow, the sky and the sun are reflected in it, and the sun lays a hot streak across it
       float roadAll = smoothstep(1.7, 1.6, abs(p.y));
-      vec3 dc = mix(concrete + gc * g * 0.9, asphalt, roadAll);
-      dc = mix(dc, mix(vec3(0.9), gc * 1.6, 0.45), clamp(edge * 0.9, 0., 1.));
-      dc = mix(dc, vec3(0.95), dash);
+      vec3 dc = vec3(0.008, 0.009, 0.014) + gc * (g * 1.6 + edge * 3.) + vec3(1.0) * dash * 0.8;
       vec3 V = normalize(vW - uCam), Rf = vec3(V.x, -V.y, V.z);
       float fr = 0.04 + 0.96 * pow(1. - clamp(-V.y, 0., 1.), 5.), rs = max(0., dot(Rf, SUN));
-      vec3 skyR = mix(vec3(1.0, 0.62, 0.45), vec3(0.16, 0.42, 0.92), smoothstep(0., 0.2, Rf.y)) + vec3(1.0, 0.7, 0.4) * pow(rs, 8.) * 0.7;
-      dc = mix(dc, skyR, fr * mix(0.25, 0.3, roadAll));
-      dc += vec3(1.0, 0.8, 0.55) * (pow(rs, 400.) * 4. + pow(rs, 24.) * 0.35) * (0.35 + 0.65 * roadAll);
-      dc = mix(uFog, dc, exp(-distance(vW, uCam) * 0.012));
+      vec3 skyR = mix(vec3(1.0, 0.6, 0.42), vec3(0.16, 0.42, 0.92), smoothstep(0., 0.2, Rf.y));
+      dc += skyR * fr * mix(0.3, 0.25, roadAll);
+      float streak = pow(max(0., 1. - abs(Rf.x * SUN.z - Rf.z * SUN.x) * 6.), 6.) * smoothstep(0.6, 1., rs); // the sun's glitter path
+      dc += vec3(1.0, 0.72, 0.4) * (pow(rs, 400.) * 5. + pow(rs, 30.) * 0.12 + streak * 0.9) * smoothstep(0.03, 0.15, -V.y); // fades out towards the horizon so it never washes over the bike
+      dc = mix(uFog, dc, exp(-distance(vW, uCam) * 0.006)); // a warm haze only far off
       gl_FragColor = mix(night, vec4(dc, 1.), uDay);
       }
     }`
@@ -210,6 +206,27 @@ function placeFlare(D) {
     m.position.set(sx * f, sy * f, -1); m.scale.setScalar(m.userData.size * th); m.material.opacity = m.userData.o * on;
   });
 }
+
+// golden hour: specks of light drifting up through the air along the road, by day only
+const motes = (() => {
+  const n = LITE ? 160 : 420, pos = new Float32Array(n * 3), col = new Float32Array(n * 3), seed = new Float32Array(n), tc = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    pos.set([-14 + rnd() * 92, rnd() * 5, (rnd() - 0.5) * 18], i * 3); seed[i] = rnd();
+    (rnd() < 0.55 ? tc.setRGB(1, 0.72, 0.38) : gem(rnd(), tc)).toArray(col, i * 3);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.BufferAttribute(col, 3)); g.setAttribute("seed", new THREE.BufferAttribute(seed, 1));
+  const m = new THREE.Points(g, new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uT: { value: 0 }, uO: { value: 0 }, uMap: { value: GLOW }, uPx: { value: 1 } },
+    vertexShader: `attribute float seed; attribute vec3 color; uniform float uT, uPx; varying vec3 vC; varying float vA;
+      void main(){ vec3 p = position; float t = uT * (0.12 + seed * 0.2);
+        p.y = mod(p.y + t, 5.) + 0.15; p.x += sin(uT * 0.4 + seed * 40.) * 0.5; p.z += cos(uT * 0.3 + seed * 25.) * 0.5;
+        vec4 mv = modelViewMatrix * vec4(p, 1.); gl_Position = projectionMatrix * mv;
+        gl_PointSize = (0.12 + seed * 0.16) * uPx * 600. / -mv.z; vC = color;
+        vA = smoothstep(0.15, 0.8, p.y) * smoothstep(5.15, 4., p.y) * (0.55 + 0.45 * sin(uT * 2. + seed * 60.)); }`,
+    fragmentShader: "uniform sampler2D uMap; uniform float uO; varying vec3 vC; varying float vA; void main(){ gl_FragColor = vec4(vC * 3., texture2D(uMap, gl_PointCoord).a * vA * uO); }"
+  }));
+  m.frustumCulled = false; m.visible = false; scene.add(m); return m;
+})();
 
 // Roadside light posts
 let lampCaps = null, lampBase = null, lampsLit = true; // the way in lights the lamps one by one
@@ -799,7 +816,8 @@ function frame(t, dt, p) {
   bloom.strength = 0.7 + S.boost * 0.2 + burst * 1.1;
   extra.day += (extra.dayWant - extra.day) * (1 - Math.exp(-rdt * 2.2));
   const D = extra.day;
-  sky.material.uniforms.uDay.value = D; sky.material.uniforms.uT.value = t; placeFlare(D); if (stars) stars.material.opacity = 1 - D;
+  sky.material.uniforms.uDay.value = D; sky.material.uniforms.uT.value = t; placeFlare(D);
+  motes.visible = D > 0.01; motes.material.uniforms.uT.value = t; motes.material.uniforms.uO.value = D; motes.material.uniforms.uPx.value = renderer.getPixelRatio() * innerHeight / 800; if (stars) stars.material.opacity = 1 - D;
   scene.background.copy(NIGHT_BG).lerp(DAY_BG, D); scene.fog.color.copy(NIGHT_FOG).lerp(DAY_FOG, D); scene.fog.density = 0.018 - 0.011 * D;
   ground.material.uniforms.uDay.value = D; ground.material.uniforms.uFog.value.copy(scene.fog.color);
   hemi.intensity = 0.4 + 1.1 * D; hemi.color.setRGB(0.56 + 0.2 * D, 0.69 + 0.15 * D, 1); hemi.groundColor.setRGB(0.07 + 0.35 * D, 0.04 + 0.33 * D, 0.09 + 0.28 * D);
@@ -818,7 +836,7 @@ function frame(t, dt, p) {
     longShadow.position.set(bike.position.x + ux * len * 0.38, 0.005, bike.position.z + uz * len * 0.38);
     longShadow.material.opacity = 0.8 * D / (1 + 2 * Math.max(0, bike.position.y));
   }
-  if (lampCaps) lampCaps.material.color.setScalar(1 - 0.8 * D); // street lamps off in daylight
+  if (lampCaps) lampCaps.material.color.setScalar(1 - 0.15 * D); // the lamps stay lit at golden hour
   monGlow.material.opacity = 0.5 * (1 - 0.8 * D); monLight.intensity = 60 * (1 - 0.7 * D);
   beam.material.uniforms.uI.value *= 1 - 0.7 * D; ledGlow.material.opacity *= 1 - 0.5 * D;
   bloom.strength *= 1 - 0.2 * D; bloom.threshold = 0.55 + 0.65 * D; // by day only the sun and its glints are bright enough to bloom
