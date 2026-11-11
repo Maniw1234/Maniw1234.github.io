@@ -331,6 +331,15 @@
     var frag = document.createDocumentFragment();
     var h = el("h2", "pfull__title", p.title); h.id = "pview-title"; frag.appendChild(h);
     if (p.summary) frag.appendChild(el("p", "pfull__tag", p.summary));
+    // the project's own website, when it has one, is the first thing you can press
+    var site = safeUrl(p.website);
+    if (site) {
+      var cta = el("div", "pfull__cta"), go = linkBtn(p.website_label || "Open live", site, true);
+      go.className += " btn--xl"; go.target = "_blank"; go.appendChild(el("span", "btn__arrow", "\u2197"));
+      cta.appendChild(go);
+      cta.appendChild(el("span", "pfull__host", site.replace(/^https?:\/\//i, "").replace(/\/$/, "")));
+      frag.appendChild(cta);
+    }
     // a short film of the project, when it has one: it plays by itself, silent, and loops (controls to pause it)
     var film = sitePath(p.video);
     if (film) {
@@ -368,7 +377,11 @@
       var file = sitePath(dl && dl.file), url = safeUrl(dl && dl.url), href = file || url;
       if (href) row.appendChild(linkBtn((dl.label || "Download"), href, true, !!file));
     });
-    if (web) row.appendChild(linkBtn("Open live", web, !row.children.length));
+    if (web) { // the website comes first in the row, ahead of the downloads
+      var wb = linkBtn(p.website_label || "Open live", web, true);
+      wb.className += " btn--site"; wb.target = "_blank"; wb.appendChild(el("span", "btn__arrow", "\u2197"));
+      row.insertBefore(wb, row.firstChild);
+    }
     if (gh) row.appendChild(linkBtn("View on GitHub", gh, false));
     if (row.children.length) box.appendChild(row);
     else box.appendChild(el("p", "d-note", "Links and downloads for this project will be added here."));
@@ -397,38 +410,68 @@
 
   /* ---------- full-screen project view ---------- */
   var body = document.getElementById("pview-body"), num = document.getElementById("pview-n");
-  var opener = null, spinRaf = 0, shareBtn = document.getElementById("pview-share"), current = null;
+  var opener = null, spinRaf = 0, galTimer = 0, shareBtn = document.getElementById("pview-share"), current = null;
   function buildGallery(rootEl) {
     var g = rootEl.querySelector("[data-gallery]"); if (!g) return;
     var shots = Array.prototype.slice.call(g.children); if (!shots.length) return;
     var ring = el("div", "gallery__ring");
     shots.forEach(function (s) { ring.appendChild(s); });
     g.appendChild(ring);
-    // coverflow in 3D: each shot is placed by its distance from the current position, wrapping around
-    var n = shots.length, cur = 0, vel = REDUCED || n < 2 ? 0 : 0.12, drag = null;
+    // coverflow in 3D: one shot faces you, its neighbours peek in from the sides. It steps to the next shot every few
+    // seconds and only animates while it is moving, so a still gallery costs nothing.
+    var n = shots.length, cur = 0, target = 0, drag = null, w = 360, running = false;
+    function measure() { w = shots[0].offsetWidth || 360; }
     function draw() {
-      var w = shots[0].getBoundingClientRect().width || 360;
       shots.forEach(function (s, i) {
         var o = ((i - cur) % n + n) % n; if (o >= n / 2) o -= n;
-        var a = Math.abs(o);
-        s.style.transform = "translate(-50%,-50%) translateX(" + (o * w * 0.62).toFixed(1) + "px) translateZ(" + (-a * 160).toFixed(1) + "px) rotateY(" + (-o * 32).toFixed(2) + "deg)";
-        s.style.opacity = String(Math.max(0, 1 - Math.max(0, a - 0.9) * 2.2));
+        var a = Math.abs(o), t = Math.max(-1.5, Math.min(1.5, o));
+        s.style.transform = "translate(-50%,-50%) translateX(" + (o * w * 0.84).toFixed(1) + "px) translateZ(" + (-Math.abs(t) * 170).toFixed(1) + "px) rotateY(" + (-t * 30).toFixed(2) + "deg)";
+        s.style.opacity = a > 1.6 ? "0" : Math.max(0, 1 - Math.min(1, a) * 0.62 - Math.max(0, a - 1) * 0.63).toFixed(3);
+        s.style.visibility = a > 1.6 ? "hidden" : "visible";
         s.style.zIndex = String(10 - Math.round(a * 2));
+        s.classList.toggle("is-front", a < 0.5);
       });
     }
-    var last = performance.now();
-    function spin(now) {
+    var last = 0;
+    function tick(now) {
       var dt = Math.min(0.05, (now - last) / 1000); last = now;
-      if (!drag) cur += vel * dt;
-      draw(); spinRaf = requestAnimationFrame(spin);
+      if (!drag) {
+        var d = target - cur;
+        if (Math.abs(d) < 0.002) { cur = target; draw(); running = false; return; }
+        cur += d * Math.min(1, dt * 7);
+      }
+      draw(); spinRaf = requestAnimationFrame(tick);
+    }
+    function run() { if (running) return; running = true; last = performance.now(); spinRaf = requestAnimationFrame(tick); }
+    function go(t) { target = t; if (REDUCED) { cur = target; draw(); } else run(); }
+    function auto() {
+      clearInterval(galTimer);
+      if (!REDUCED && n > 1) galTimer = setInterval(function () { if (!drag && !document.hidden) go(Math.round(target) + 1); }, 4200);
     }
     if (n > 1) {
-      g.addEventListener("pointerdown", function (e) { drag = { x: e.clientX, c: cur }; g.setPointerCapture(e.pointerId); });
-      g.addEventListener("pointermove", function (e) { if (drag) cur = drag.c - (e.clientX - drag.x) / (shots[0].getBoundingClientRect().width || 360); });
-      g.addEventListener("pointerup", function () { drag = null; });
-      g.addEventListener("pointercancel", function () { drag = null; }); // a phone took the touch over (scrolling)
+      g.addEventListener("pointerdown", function (e) {
+        drag = { x: e.clientX, c: cur, moved: false, shot: e.target.closest(".shot") };
+        g.setPointerCapture(e.pointerId); clearInterval(galTimer); run();
+      });
+      g.addEventListener("pointermove", function (e) {
+        if (!drag) return;
+        var dx = e.clientX - drag.x; if (Math.abs(dx) > 6) drag.moved = true;
+        cur = drag.c - dx / (w * 0.84);
+      });
+      g.addEventListener("pointerup", function () {
+        if (!drag) return;
+        var d = drag; drag = null;
+        if (d.moved) go(Math.round(cur));
+        else if (d.shot) { // a tap on a side shot brings it to the front
+          var i = shots.indexOf(d.shot), o = ((i - Math.round(cur)) % n + n) % n; if (o >= n / 2) o -= n;
+          go(Math.round(cur) + o);
+        }
+        auto();
+      });
+      g.addEventListener("pointercancel", function () { if (drag) { drag = null; go(Math.round(cur)); auto(); } }); // a phone took the touch over (scrolling)
+      window.addEventListener("resize", function () { if (g.isConnected) { measure(); draw(); } });
     }
-    draw(); if (vel) spinRaf = requestAnimationFrame(spin);
+    measure(); draw(); auto();
   }
   function openProject(i, trigger) {
     var p = projects[i];
@@ -444,7 +487,7 @@
   }
   if (view) {
     view.addEventListener("close", function () {
-      cancelAnimationFrame(spinRaf); body.innerHTML = "";
+      cancelAnimationFrame(spinRaf); clearInterval(galTimer); body.innerHTML = "";
       if (history.replaceState) history.replaceState(null, "", "#projects");
       if (opener) opener.focus();
     });
@@ -479,6 +522,12 @@
     // deep link: #project-<name> opens that project
     var h = location.hash.slice(1);
     for (var i = 0; i < projects.length; i++) if (projects[i]._id === h) { document.getElementById("projects").scrollIntoView(); openProject(i); break; }
+  });
+  // the same link opened while the page is already showing
+  window.addEventListener("hashchange", function () {
+    var h = location.hash.slice(1);
+    if (view && view.open) return;
+    for (var i = 0; i < projects.length; i++) if (projects[i]._id === h) { openProject(i); break; }
   });
 
   /* ---------- the glowing line down the side: fills as you go down, with a dot for each stop ---------- */

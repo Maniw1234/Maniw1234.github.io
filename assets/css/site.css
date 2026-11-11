@@ -325,29 +325,38 @@ html:not(.js) .sec, html:not(.js) .pin { min-height: 0; position: static; }
 .socials:empty { display: none; }
 
 /* ---------- full-screen project view ---------- */
-.pview { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; color: var(--ink); background: rgba(4, 5, 10, .94); overflow: auto; overscroll-behavior: contain; }
+.pview { width: 100%; max-width: none; height: 100%; max-height: none; margin: 0; padding: 0; border: 0; color: var(--ink); background: rgba(4, 5, 10, .94); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 .pview::backdrop { background: rgba(0, 0, 0, .6); backdrop-filter: blur(6px); }
 .pview[open] { animation: pv-in .45s cubic-bezier(.2, .8, .2, 1); }
 @keyframes pv-in { from { opacity: 0; transform: translateY(30px) scale(.98); } }
-.pview__top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 16px var(--pad); background: linear-gradient(rgba(4, 5, 10, .95), rgba(4, 5, 10, 0)); }
+.pview__top { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 12px var(--pad); background: rgba(4, 5, 10, .97); border-bottom: 1px solid var(--line); }
 .pview__share { margin-left: auto; margin-right: 10px; height: 46px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
 .pview__share svg { width: 18px; }
 .pview__share.is-done { border-color: rgba(145, 119, 199, .7); }
 .pview__close { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255, 255, 255, .06); color: var(--ink); cursor: pointer; display: grid; place-items: center; }
 .pview__close svg { width: 20px; }
-.pview__body { width: min(1100px, 100%); margin: 0 auto; padding: 0 var(--pad) 80px; }
+.pview__body { width: min(1100px, 100%); margin: 0 auto; padding: 26px var(--pad) 80px; }
 .pfull__title { font-size: clamp(38px, 6vw, 84px); font-weight: 900; letter-spacing: -.045em; line-height: .95; }
 .pview .pfull__title { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .pfull__tag { margin-top: 14px; max-width: 46em; color: var(--muted); font-size: clamp(16px, 1.5vw, 19px); }
 
 /* the project's film */
+/* the project's own website: the loudest thing on the page */
+.pfull__cta { margin-top: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }
+.btn--xl { min-height: 64px; padding: 0 34px; font-size: clamp(17px, 1.6vw, 21px); font-weight: 800; box-shadow: 0 0 0 1px rgba(255, 255, 255, .18) inset, 0 18px 50px -12px rgba(145, 119, 199, .95); }
+.btn--xl:hover { transform: translateY(-3px) scale(1.02); }
+.btn__arrow { font-size: 1.15em; line-height: 1; transition: transform .2s; }
+.btn:hover .btn__arrow { transform: translate(2px, -2px); }
+.pfull__host { color: var(--muted); font-size: 14px; letter-spacing: .02em; }
+.btn--site { box-shadow: 0 0 0 1px rgba(255, 255, 255, .18) inset, 0 12px 34px -10px rgba(145, 119, 199, .95); }
 .pfilm { margin: 30px 0 0; border-radius: 20px; overflow: hidden; border: 1px solid var(--line); background: #000; box-shadow: 0 40px 90px -40px rgba(0, 0, 0, .9); }
 .pfilm video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
 
 /* 3D screenshot carousel */
-.gallery { touch-action: pan-y; position: relative; height: clamp(250px, 46vw, 540px); margin: 34px 0 10px; perspective: 1400px; }
+.gallery { touch-action: pan-y; position: relative; height: clamp(230px, 44vw, 500px); margin: 34px calc(var(--pad) * -1) 10px; overflow: hidden; perspective: 1400px; cursor: grab; user-select: none; }
 .gallery__ring { position: absolute; inset: 0; transform-style: preserve-3d; }
-.shot { position: absolute; left: 50%; top: 50%; width: clamp(240px, 54vw, 720px); aspect-ratio: 16 / 10; margin: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #0b0d16; box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .9); touch-action: pan-y; }
+.shot { position: absolute; left: 50%; top: 50%; width: clamp(240px, 60vw, 680px); aspect-ratio: 16 / 10; margin: 0; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: #0b0d16; box-shadow: 0 30px 60px -30px rgba(0, 0, 0, .9); touch-action: pan-y; will-change: transform, opacity; }
+.shot:not(.is-front) { cursor: pointer; }
 .shot img { width: 100%; height: 100%; object-fit: cover; }
 html:not(.js) .gallery { height: auto; display: flex; gap: 10px; flex-wrap: wrap; }
 html:not(.js) .shot { position: static; width: 220px; }

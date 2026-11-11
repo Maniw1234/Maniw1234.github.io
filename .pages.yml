@@ -51,6 +51,9 @@ content:
       - name: website
         label: Live link
         type: string
+      - name: website_label
+        label: Live link button text (leave empty for "Open live")
+        type: string
       - name: downloads
         label: Downloads (EXE, APK, ZIP...)
         type: object
