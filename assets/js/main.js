@@ -81,10 +81,12 @@ const rimRose = new THREE.DirectionalLight(0xca6673, 0.7); rimRose.position.set(
 // studio key light that travels with the camera, so the black bike reads like a product shot
 const keyLight = new THREE.DirectionalLight(0xf2f4ff, 1.7); scene.add(keyLight, keyLight.target);
 
+const SUN_DIR = [-0.18, 0.06, -1]; // where the daytime sun sits: low, just right of the bike in the opening shot
 const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24), new THREE.ShaderMaterial({
-  side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uDay: { value: 0 } },
+  side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { uDay: { value: 0 }, uT: { value: 0 } },
   vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }",
-  fragmentShader: `varying vec3 vP; uniform float uDay;
+  fragmentShader: `varying vec3 vP; uniform float uDay, uT;
+    const vec3 SUN = normalize(vec3(${SUN_DIR.join(",")}));
     void main(){
       vec3 c = vec3(0.012,0.014,0.03);
       c += vec3(0.10,0.25,0.55) * pow(max(0., 1. - abs(vP.y - 0.05) * 4.), 3.) * 0.35;
@@ -92,20 +94,23 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(300, 48, 24), new THREE.Shad
       c += vec3(0.60,0.22,0.30) * smoothstep(0.8, 1., dot(vP, normalize(vec3(-0.7,0.15,-0.6)))) * 0.35;
       c *= 0.45;
       if (uDay > 0.001) { // day only (skipped at night, it is the costly part)
-      // day: a clear blue sky that warms to peach at the horizon, with the sun low on the right
-      float h = clamp(vP.y, 0., 1.);
-      vec3 d = mix(vec3(0.42,0.58,0.85), vec3(0.06,0.22,0.62), pow(h, 0.45));
-      vec3 sunD = normalize(vec3(0.55,0.18,-0.8));
-      d += vec3(1.0,0.85,0.6) * (pow(max(0., dot(vP, sunD)), 900.) * 3. + pow(max(0., dot(vP, sunD)), 12.) * 0.35);
-      // soft fair-weather clouds
-      vec2 q = vP.xz / max(0.12, vP.y + 0.15) * 1.6;
+      // day: a deep summer blue overhead that burns to gold and rose at the horizon, with a low sun behind the bike
+      float h = clamp(vP.y, 0., 1.), sd = max(0., dot(vP, SUN));
+      vec3 d = mix(vec3(1.0,0.62,0.45), vec3(0.24,0.56,0.98), smoothstep(0.0, 0.09, h));
+      d = mix(d, vec3(0.02,0.16,0.6), smoothstep(0.09, 0.7, h));
+      d += vec3(0.79,0.40,0.55) * exp(-h * 12.) * 0.35 * (1. - sd); // a rose band low down, away from the sun
+      d += vec3(1.0,0.55,0.25) * (pow(sd, 6.) * 0.25 + pow(sd, 80.) * 0.5); // the sky glows gold around it
+      d += vec3(1.0,0.95,0.85) * smoothstep(0.9988, 0.9993, sd) * 40. + vec3(1.0,0.7,0.35) * pow(sd, 500.) * 4.; // the sun itself, bright enough to bloom
+      // drifting fair-weather clouds, lit gold where the sun catches their edges
+      vec2 q = vP.xz / max(0.12, vP.y + 0.15) * 1.6 + vec2(uT * 0.012, uT * 0.004);
       float cl = 0.; float a = 0.5; vec2 r = q;
       for (int k = 0; k < 5; k++) { vec2 i = floor(r), f = fract(r); f = f * f * (3. - 2. * f);
         float h00 = fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.55), h10 = fract(sin(dot(i + vec2(1, 0), vec2(127.1, 311.7))) * 43758.55);
         float h01 = fract(sin(dot(i + vec2(0, 1), vec2(127.1, 311.7))) * 43758.55), h11 = fract(sin(dot(i + vec2(1, 1), vec2(127.1, 311.7))) * 43758.55);
         cl += a * mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y); r *= 2.03; a *= 0.5; }
-      cl = smoothstep(0.52, 0.8, cl) * smoothstep(0.02, 0.2, vP.y);
-      d = mix(d, vec3(1.0, 0.99, 0.97), cl * 0.85);
+      float body = smoothstep(0.6, 0.88, cl) * smoothstep(0.02, 0.2, vP.y) * (1. - smoothstep(0.86, 0.97, sd)), lining = smoothstep(0.5, 0.62, cl) - smoothstep(0.62, 0.8, cl);
+      vec3 cc = mix(vec3(0.78,0.74,0.86), vec3(1.0,0.98,0.96), smoothstep(0.55, 0.9, cl)) + vec3(1.0,0.6,0.3) * pow(sd, 4.) * 0.5;
+      d = mix(d, cc, body * 0.9) + vec3(1.0,0.75,0.45) * lining * pow(sd, 3.) * 1.2 * smoothstep(0.02, 0.2, vP.y);
       c = mix(c, d, uDay);
       }
       gl_FragColor = vec4(c, 1.);
@@ -131,6 +136,7 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
   uniforms: { uCam: { value: new THREE.Vector3() }, uDay: { value: 0 }, uFog: { value: new THREE.Color() }, uOrigin: { value: new THREE.Vector2() }, uReveal: { value: 1e4 }, uFront: { value: 0 } },
   vertexShader: "varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
   fragmentShader: `varying vec3 vW; uniform vec3 uCam; uniform float uDay; uniform vec3 uFog; uniform vec2 uOrigin; uniform float uReveal, uFront;
+    const vec3 SUN = normalize(vec3(${SUN_DIR.join(",")}));
     float line(float v, float w){ float d = abs(fract(v - 0.5) - 0.5) / fwidth(v); return 1. - min(d / w, 1.); }
     void main(){
       vec2 p = vW.xz;
@@ -149,13 +155,20 @@ const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE
       vec4 night = vec4(c * fade, ((g * 0.6 + edge + dash + road * 0.6) * on + front * (g * 2. + 0.2)) * fade);
       gl_FragColor = night;
       if (uDay > 0.001) {
-      // day: pale concrete plaza with faint expansion joints, a grey asphalt road, white lines; hazes into the sky
+      // day: a polished pale plaza with the neon grid set into it as coloured inlays, a glossy dark road that
+      // mirrors the sky, and the sun glinting off it; it all hazes into the sky
       float n = fract(sin(dot(floor(p * 3.), vec2(12.9898, 78.233))) * 43758.5453);
-      vec3 concrete = vec3(0.30, 0.295, 0.28) * (0.94 + 0.06 * n) * (1. - 0.18 * max(line(p.x / 4., 1.), line(p.y / 4., 1.)));
-      vec3 asphalt = vec3(0.035, 0.037, 0.042) * (0.92 + 0.12 * n);
+      vec3 concrete = vec3(0.31, 0.3, 0.29) * (0.93 + 0.07 * n) * (1. - 0.2 * max(line(p.x / 4., 1.), line(p.y / 4., 1.)));
+      vec3 asphalt = vec3(0.03, 0.032, 0.04) * (0.92 + 0.12 * n);
       float roadAll = smoothstep(1.7, 1.6, abs(p.y));
-      vec3 dc = mix(concrete, asphalt, roadAll);
-      dc = mix(dc, vec3(0.75), clamp(edge * 0.9 + dash, 0., 1.));
+      vec3 dc = mix(concrete + gc * g * 0.9, asphalt, roadAll);
+      dc = mix(dc, mix(vec3(0.9), gc * 1.6, 0.45), clamp(edge * 0.9, 0., 1.));
+      dc = mix(dc, vec3(0.95), dash);
+      vec3 V = normalize(vW - uCam), Rf = vec3(V.x, -V.y, V.z);
+      float fr = 0.04 + 0.96 * pow(1. - clamp(-V.y, 0., 1.), 5.), rs = max(0., dot(Rf, SUN));
+      vec3 skyR = mix(vec3(1.0, 0.62, 0.45), vec3(0.16, 0.42, 0.92), smoothstep(0., 0.2, Rf.y)) + vec3(1.0, 0.7, 0.4) * pow(rs, 8.) * 0.7;
+      dc = mix(dc, skyR, fr * mix(0.25, 0.3, roadAll));
+      dc += vec3(1.0, 0.8, 0.55) * (pow(rs, 400.) * 4. + pow(rs, 24.) * 0.35) * (0.35 + 0.65 * roadAll);
       dc = mix(uFog, dc, exp(-distance(vW, uCam) * 0.012));
       gl_FragColor = mix(night, vec4(dc, 1.), uDay);
       }
@@ -169,6 +182,34 @@ const shadowBlob = (() => {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(2.9, 1.15), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, opacity: 0, fog: false }));
   m.rotation.order = "YXZ"; m.rotation.x = -Math.PI / 2; m.position.y = 0.006; m.renderOrder = 2; m.visible = false; scene.add(m); return m;
 })();
+// and the long golden-hour shadow the low sun throws out behind it, towards the camera
+const longShadow = (() => {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 256; const g = c.getContext("2d");
+  const along = g.createLinearGradient(0, 0, 0, 256); along.addColorStop(0, "rgba(0,0,0,0)"); along.addColorStop(0.08, "rgba(0,0,0,.95)"); along.addColorStop(0.55, "rgba(0,0,0,.55)"); along.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = along; g.fillRect(0, 0, 64, 256); g.globalCompositeOperation = "destination-in";
+  const side = g.createLinearGradient(0, 0, 64, 0); side.addColorStop(0, "rgba(0,0,0,0)"); side.addColorStop(0.3, "#000"); side.addColorStop(0.7, "#000"); side.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = side; g.fillRect(0, 0, 64, 256);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false, opacity: 0, fog: false }));
+  m.rotation.order = "YXZ"; m.rotation.x = -Math.PI / 2; m.position.y = 0.005; m.renderOrder = 2; m.visible = false; scene.add(m); return m;
+})();
+
+// daytime lens flare: when the low sun is in shot it throws a string of coloured ghosts across the lens
+const SUN_V = new THREE.Vector3(...SUN_DIR).normalize(), flareAt = new THREE.Vector3(), flareQ = new THREE.Quaternion();
+const flare = [[0, 0.5, 0xffb060, 0.6], [0, 0.09, 0xfff6e8, 1], [0.3, 0.1, 0x4796e3, 0.4], [0.55, 0.2, 0x9177c7, 0.25], [0.9, 0.06, 0xffffff, 0.35], [1.25, 0.14, 0xca6673, 0.35], [1.6, 0.32, 0x4796e3, 0.16], [1.95, 0.1, 0xffc87a, 0.3]].map(([k, size, c, o]) => {
+  const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: c, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false }));
+  m.userData = { k, size, o }; m.renderOrder = 20; m.visible = false; camera.add(m); return m;
+});
+scene.add(camera);
+function placeFlare(D) {
+  flareAt.copy(SUN_V).applyQuaternion(flareQ.copy(camera.quaternion).invert()); // the sun's direction as the lens sees it
+  const th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), sx = flareAt.x / -flareAt.z, sy = flareAt.y / -flareAt.z;
+  const on = D * (flareAt.z < 0 ? 1 : 0) * smooth(1.25, 0.85, Math.max(Math.abs(sx / (th * camera.aspect)), Math.abs(sy / th)));
+  flare.forEach((m) => {
+    m.visible = on > 0.01; if (!m.visible) return;
+    const f = 1 - m.userData.k; // 1 at the sun, 0 at the centre, negative past it
+    m.position.set(sx * f, sy * f, -1); m.scale.setScalar(m.userData.size * th); m.material.opacity = m.userData.o * on;
+  });
+}
 
 // Roadside light posts
 let lampCaps = null, lampBase = null, lampsLit = true; // the way in lights the lamps one by one
@@ -539,8 +580,8 @@ if (intro.pending) {
   addEventListener("scroll", () => { if (scrollY > 40 && intro.pending) { intro.pending = false; html.classList.remove("intro"); } }, { passive: true }); // scrolled away: skip it
 }
 /* ---------------- extras: day and night, the garage (paint + drag to spin), and the "vroom" wheelie ---------------- */
-const NIGHT_BG = new THREE.Color(0x04050a), DAY_BG = new THREE.Color(0x6f9fe0), NIGHT_FOG = new THREE.Color(0x05060c), DAY_FOG = new THREE.Color(0xa6c1ea);
-const MOON_C = new THREE.Color(0xc8d4ff), SUN_C = new THREE.Color(0xffe2c0);
+const NIGHT_BG = new THREE.Color(0x04050a), DAY_BG = new THREE.Color(0x6f9fe0), NIGHT_FOG = new THREE.Color(0x05060c), DAY_FOG = new THREE.Color(0xe9b79e);
+const MOON_C = new THREE.Color(0xc8d4ff), SUN_C = new THREE.Color(0xffe2c0), ROSE_C = new THREE.Color(0xca6673), GOLD_C = new THREE.Color(0xffb36b);
 const extra = { day: 0, dayWant: 0, garage: false, spin: 0, wheelie: -1, paint: null };
 const PAINTS = { stealth: 0x141519, pearl: 0xd9dce3, candy: 0x9e1020, lime: 0x3f9e1c, gemini: 0x2f6fc0, violet: 0x5b3d9c };
 function setPaint(name) {
@@ -758,21 +799,29 @@ function frame(t, dt, p) {
   bloom.strength = 0.7 + S.boost * 0.2 + burst * 1.1;
   extra.day += (extra.dayWant - extra.day) * (1 - Math.exp(-rdt * 2.2));
   const D = extra.day;
-  sky.material.uniforms.uDay.value = D; if (stars) stars.material.opacity = 1 - D;
+  sky.material.uniforms.uDay.value = D; sky.material.uniforms.uT.value = t; placeFlare(D); if (stars) stars.material.opacity = 1 - D;
   scene.background.copy(NIGHT_BG).lerp(DAY_BG, D); scene.fog.color.copy(NIGHT_FOG).lerp(DAY_FOG, D); scene.fog.density = 0.018 - 0.011 * D;
   ground.material.uniforms.uDay.value = D; ground.material.uniforms.uFog.value.copy(scene.fog.color);
   hemi.intensity = 0.4 + 1.1 * D; hemi.color.setRGB(0.56 + 0.2 * D, 0.69 + 0.15 * D, 1); hemi.groundColor.setRGB(0.07 + 0.35 * D, 0.04 + 0.33 * D, 0.09 + 0.28 * D);
   moon.intensity = 1.4 + 2.4 * D; moon.color.copy(MOON_C).lerp(SUN_C, D);
-  rimBlue.intensity = 1.6 * (1 - 0.8 * D); rimRose.intensity = 0.7 * (1 - 0.8 * D); keyLight.intensity = 1.7 * (1 - 0.5 * D);
+  rimBlue.intensity = 1.6 * (1 - 0.8 * D); rimRose.intensity = 0.7 + 1.1 * D; rimRose.color.copy(ROSE_C).lerp(GOLD_C, D); keyLight.intensity = 1.7 * (1 - 0.5 * D); // by day the rose rim turns into warm sunlight off the back of the bike
   if (D > 0 && makeDayEnv) makeDayEnv();
   if (dayEnv) scene.environment = D > 0.5 ? dayEnv : nightEnv;
   // the contact shadow sits under the bike and turns with it; it fades as the bike leaves the ground
   shadowBlob.visible = D > 0.01; shadowBlob.material.opacity = 0.6 * D / (1 + 2 * Math.max(0, bike.position.y));
   if (shadowBlob.visible) { shadowBlob.position.x = bike.position.x + 0.15; shadowBlob.position.z = bike.position.z + 0.1; shadowBlob.rotation.y = bike.rotation.y; }
+  longShadow.visible = shadowBlob.visible;
+  if (longShadow.visible) {
+    const ax = -SUN_V.x, az = -SUN_V.z, al = Math.hypot(ax, az), ux = ax / al, uz = az / al, len = 7 / (1 + 2 * Math.max(0, bike.position.y));
+    const fx = Math.cos(bike.rotation.y), fz = -Math.sin(bike.rotation.y), wide = Math.abs(fx * uz - fz * ux) * 2.1 + 0.5; // a bike side-on to the sun throws a wider shadow
+    longShadow.scale.set(wide, len, 1); longShadow.rotation.y = Math.atan2(ux, uz);
+    longShadow.position.set(bike.position.x + ux * len * 0.38, 0.005, bike.position.z + uz * len * 0.38);
+    longShadow.material.opacity = 0.8 * D / (1 + 2 * Math.max(0, bike.position.y));
+  }
   if (lampCaps) lampCaps.material.color.setScalar(1 - 0.8 * D); // street lamps off in daylight
   monGlow.material.opacity = 0.5 * (1 - 0.8 * D); monLight.intensity = 60 * (1 - 0.7 * D);
   beam.material.uniforms.uI.value *= 1 - 0.7 * D; ledGlow.material.opacity *= 1 - 0.5 * D;
-  bloom.strength *= 1 - 0.85 * D; bloom.threshold = 0.55 + 0.4 * D;
+  bloom.strength *= 1 - 0.2 * D; bloom.threshold = 0.55 + 0.65 * D; // by day only the sun and its glints are bright enough to bloom
   renderer.toneMappingExposure = (1.05 + 0.15 * D) * (intro.pending ? 0.18 + 0.82 * smooth(0.4, FIRE_S + 0.5, is) : 1); // dark until the light and the engine come on
   flash *= 0.85; if (flashEl) flashEl.style.opacity = flash.toFixed(3);
 

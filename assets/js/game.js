@@ -725,7 +725,8 @@ function render(t, dt, inp) {
   // in the air the bike turns about its middle, not its tyres
   const wh = Math.sin(R.wheelie);
   game.lift += ((R.air ? 0.75 : 0) - game.lift) * (1 - Math.exp(-dt * 12));
-  bike.position.set(R.x, R.y + 0.75 * wh * 0.5 + game.lift, R.z);
+  const kneeDown = R.air ? 0 : clamp((Math.abs(R.lean) - 0.95) / 0.25, 0, 1); // fully laid over
+  bike.position.set(R.x, R.y + 0.75 * wh * 0.5 + game.lift + 0.1 * Math.sin(Math.abs(R.lean)) ** 2, R.z); // the tyre rolls onto its edge as it leans
   bike.rotation.set(R.lean, R.yaw + R.spin, R.pitch + R.wheelie + R.flip);
   const spin = R.v * dt / 0.42;
   h2.wheels.forEach((w, k) => { if (w) w.rotation.z -= spin * (k === 0 && inp.up && Math.abs(R.v) < 6 && game.mode === "run" ? 1.6 : 1); });
@@ -760,6 +761,10 @@ function render(t, dt, inp) {
   }
   trailGeo.attributes.position.needsUpdate = true; trailGeo.attributes.color.needsUpdate = true;
   // sparks and smoke-free particles
+  if (kneeDown > 0 && Math.abs(R.v) > 12 && rnd() < 0.35 + kneeDown * 0.6) { // the inside of the bike scrapes the road
+    const a = body.localToWorld(tmp.set(0, 0.2, 0.32)), b = body.localToWorld(tmp3.set(0, 0.2, -0.32)), lo = a.y < b.y ? a : b; lo.y = 0.06;
+    burst(lo, 1 + Math.round(kneeDown * 3), tmp2.set(-Math.cos(R.yaw), 0.35, Math.sin(R.yaw)), 0.9, 3 + Math.abs(R.v) * 0.12, 0xffb85a, 0.45, 9);
+  }
   if (R.off && Math.abs(R.v) > 8 && rnd() < 0.5) burst(tmp.set(R.x, 0.1, R.z), 2, tmp2.set(-Math.cos(R.yaw), 0.8, Math.sin(R.yaw)), 1.2, 4, 0x9a7a60, 0.5);
   for (let i = 0; i < SP; i++) {
     const s = sparks[i];
